@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Bot Dashboard</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--g:#1DA462;--gd:#0d7a47;--bg:#f4f4ef;--card:#fff;--text:#1a1a18;--muted:#6b6b65;--border:#e0e0d8;--red:#e05252;--amber:#d4820a}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+header{background:#fff;border-bottom:1px solid var(--border);padding:0 28px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
+.logo{font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px}
+.logo span{background:var(--g);color:#fff;width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px}
+nav{display:flex;gap:2px}
+nav button{padding:6px 14px;border:none;background:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--muted);cursor:pointer;border-radius:6px;font-weight:500}
+nav button.active{background:var(--g);color:#fff}
+.main{max-width:900px;margin:0 auto;padding:24px 16px}
+.panel{display:none}.panel.active{display:block}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:22px}
+.stat{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.stat-n{font-size:26px;font-weight:600}.stat-l{font-size:11px;color:var(--muted);margin-top:2px}
+.stat.g .stat-n{color:var(--g)}.stat.a .stat-n{color:var(--amber)}.stat.r .stat-n{color:var(--red)}
+.card{background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden}
+.card-head{padding:14px 18px;font-weight:500;font-size:14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+.card-head .arr{margin-left:auto;color:var(--muted);font-size:11px;transition:transform .2s}
+.card-head.open .arr{transform:rotate(180deg)}
+.card-body{padding:18px;display:none}.card-body.open{display:block}
+label{display:block;font-size:11px;font-weight:500;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+input,textarea,select{width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);background:#fafaf8;outline:none}
+input:focus,textarea:focus{border-color:var(--g)}
+textarea{resize:vertical;min-height:70px}
+.field{margin-bottom:12px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.btn{padding:9px 18px;border:1px solid var(--border);border-radius:7px;background:#fff;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;color:var(--text)}
+.btn:hover{background:var(--bg)}
+.btn.primary{background:var(--g);color:#fff;border-color:var(--g)}
+.btn.primary:hover{background:var(--gd)}
+.btn.danger{color:var(--red);border-color:var(--red)}
+.save-row{display:flex;justify-content:flex-end;margin-top:8px}
+.day-tabs{display:flex;gap:4px;margin-bottom:16px}
+.day-tab{padding:7px 16px;border:1px solid var(--border);border-radius:7px;background:#fafaf8;font-size:13px;font-weight:500;cursor:pointer;color:var(--muted)}
+.day-tab.active{background:var(--g);color:#fff;border-color:var(--g)}
+.day-panel{display:none}.day-panel.active{display:block}
+.media-item{background:var(--bg);border-radius:8px;padding:12px;margin-bottom:8px;border:1px solid var(--border)}
+.add-btn{display:flex;align-items:center;gap:6px;padding:8px 12px;border:1.5px dashed var(--border);border-radius:8px;background:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--muted);cursor:pointer;width:100%;justify-content:center;margin-top:8px}
+.add-btn:hover{border-color:var(--g);color:var(--g)}
+.blocked-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.blocked-tag{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:12px;display:flex;align-items:center;gap:6px}
+.blocked-tag button{background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;line-height:1;padding:0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;border-bottom:1px solid var(--border)}
+td{padding:10px 12px;border-bottom:1px solid var(--bg)}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.badge.d1{background:#E6F1FB;color:#0C447C}.badge.d2{background:#FAEEDA;color:#633806}
+.badge.d3{background:#FCEBEB;color:#791F1F}.badge.d4{background:#E1F5EE;color:#085041}
+.badge.ready{background:#E1F5EE;color:#085041}
+.send-one{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px}
+.send-one h3{font-size:14px;font-weight:500;margin-bottom:12px}
+.toast{position:fixed;bottom:20px;right:20px;background:#1a1a18;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999}
+.toast.show{opacity:1}
+.delivery-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;font-size:13px}
+.delivery-card .name{font-weight:500;margin-bottom:4px}
+.delivery-card .detail{color:var(--muted);font-size:12px;line-height:1.6}
+.section-title{font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 8px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><span>🤖</span> Bot Dashboard</div>
+  <nav>
+    <button class="active" onclick="tab('overview',this)">Overview</button>
+    <button onclick="tab('identity',this)">Identity</button>
+    <button onclick="tab('sequence',this)">4-Day Sequence</button>
+    <button onclick="tab('contacts',this)">Contacts</button>
+    <button onclick="tab('delivery',this)">Delivery Leads</button>
+    <button onclick="tab('manual',this)">Manual Send</button>
+  </nav>
+</header>
+
+<div class="main">
+
+<!-- OVERVIEW -->
+<div class="panel active" id="p-overview">
+  <div class="stats">
+    <div class="stat"><div class="stat-n" id="s-total">0</div><div class="stat-l">Total contacts</div></div>
+    <div class="stat"><div class="stat-n" id="s-d1">0</div><div class="stat-l">On Day 1</div></div>
+    <div class="stat"><div class="stat-n" id="s-d2">0</div><div class="stat-l">On Day 2</div></div>
+    <div class="stat"><div class="stat-n" id="s-d3">0</div><div class="stat-l">On Day 3</div></div>
+    <div class="stat g"><div class="stat-n" id="s-d4">0</div><div class="stat-l">On Day 4</div></div>
+  </div>
+  <div class="stat" style="background:#E1F5EE;border-color:#9FE1CB;margin-bottom:16px;padding:14px 18px;border-radius:10px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="font-size:24px;font-weight:600;color:#085041" id="s-leads">0</div>
+      <div><div style="font-weight:500;font-size:14px;color:#085041">Delivery details received</div><div style="font-size:12px;color:#0F6E56">Contacts who gave their name, number & airport</div></div>
+    </div>
+  </div>
+  <p style="font-size:13px;color:var(--muted)">Bot is running. Every new contact starts at Day 1 and advances one day every 24 hours. After Day 4 the bot stops chatting them.</p>
+</div>
+
+<!-- IDENTITY -->
+<div class="panel" id="p-identity">
+  <div class="card">
+    <div class="card-head open" onclick="tog(this)">Your identity <span class="arr">▼</span></div>
+    <div class="card-body open">
+      <div class="row2">
+        <div class="field"><label>Your name</label><input id="name" placeholder="e.g. Leonard"/></div>
+        <div class="field"><label>Location</label><input id="location" placeholder="e.g. Nairobi, Kenya"/></div>
+      </div>
+      <div class="field"><label>Your work / context</label><textarea id="work" placeholder="e.g. I run a parcel delivery service..."></textarea></div>
+      <div class="field"><label>Personality & tone</label><input id="personality" placeholder="e.g. warm, friendly, trustworthy"/></div>
+      <div class="field"><label>Phrases you use</label><input id="phrases" placeholder="e.g. sawa sawa, pole, no worries"/></div>
+      <div class="field"><label>Topics to never discuss</label><input id="offLimits" placeholder="e.g. politics, personal finances"/></div>
+      <div class="field"><label>Max messages per day per contact</label><input id="maxMessages" type="number" value="15" min="1" max="50"/></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head" onclick="tog(this)">Blocked numbers (never reply to these) <span class="arr">▼</span></div>
+    <div class="card-body">
+      <div class="blocked-list" id="blocked-list"></div>
+      <div class="row2">
+        <div class="field"><label>Phone number (with country code)</label><input id="new-blocked" placeholder="e.g. 254712345678"/></div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:12px"><button class="btn" onclick="addBlocked()">+ Add</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="save-row"><button class="btn primary" onclick="saveAll()">Save identity settings</button></div>
+</div>
+
+<!-- 4-DAY SEQUENCE -->
+<div class="panel" id="p-sequence">
+  <div class="day-tabs">
+    <div class="day-tab active" onclick="dayTab(1,this)">Day 1</div>
+    <div class="day-tab" onclick="dayTab(2,this)">Day 2</div>
+    <div class="day-tab" onclick="dayTab(3,this)">Day 3</div>
+    <div class="day-tab" onclick="dayTab(4,this)">Day 4</div>
+  </div>
+
+  <!-- DAY 1 -->
+  <div class="day-panel active" id="dp-1">
+    <div class="card"><div class="card-head open" onclick="tog(this)">Day 1 — Instructions <span class="arr">▼</span></div>
+    <div class="card-body open">
+      <div class="field"><label>What to talk about on Day 1</label><textarea id="d1-instructions" placeholder="e.g. Introduce yourself warmly. Build trust. Ask how they are. Mention you have something exciting for them. Don't reveal too much yet."></textarea></div>
+    </div></div>
+    <div class="card"><div class="card-head" onclick="tog(this)">Day 1 — Scheduled media & messages <span class="arr">▼</span></div>
+    <div class="card-body"><div id="d1-media"></div><button class="add-btn" onclick="addMedia(1)">+ Add photo / message to send</button></div></div>
+    <div class="save-row"><button class="btn primary" onclick="saveAll()">Save Day 1</button></div>
+  </div>
+
+  <!-- DAY 2 -->
+  <div class="day-panel" id="dp-2">
+    <div class="card"><div class="card-head open" onclick="tog(this)">Day 2 — Instructions <span class="arr">▼</span></div>
+    <div class="card-body open">
+      <div class="field"><label>What to talk about on Day 2</label><textarea id="d2-instructions" placeholder="e.g. Follow up warmly. Remind them about yesterday. Build more excitement. Answer any questions they have."></textarea></div>
+    </div></div>
+    <div class="card"><div class="card-head" onclick="tog(this)">Day 2 — Scheduled media & messages <span class="arr">▼</span></div>
+    <div class="card-body"><div id="d2-media"></div><button class="add-btn" onclick="addMedia(2)">+ Add photo / message to send</button></div></div>
+    <div class="save-row"><button class="btn primary" onclick="saveAll()">Save Day 2</button></div>
+  </div>
+
+  <!-- DAY 3 -->
+  <div class="day-panel" id="dp-3">
+    <div class="card"><div class="card-head open" onclick="tog(this)">Day 3 — Instructions <span class="arr">▼</span></div>
+    <div class="card-body open">
+      <div class="field"><label>What to talk about on Day 3</label><textarea id="d3-instructions" placeholder="e.g. Tell them their parcel is ready. Ask for delivery details — their full name, phone number, and nearest airport. Be warm and reassuring."></textarea></div>
+      <p style="font-size:12px;color:var(--g);margin-top:6px">✓ The bot will automatically collect: Full name · Phone number · Nearest airport. Contacts who provide these move to Day 4.</p>
+    </div></div>
+    <div class="card"><div class="card-head" onclick="tog(this)">Day 3 — Scheduled media & messages <span class="arr">▼</span></div>
+    <div class="card-body"><div id="d3-media"></div><button class="add-btn" onclick="addMedia(3)">+ Add photo / message to send</button></div></div>
+    <div class="save-row"><button class="btn primary" onclick="saveAll()">Save Day 3</button></div>
+  </div>
+
+  <!-- DAY 4 -->
+  <div class="day-panel" id="dp-4">
+    <div class="card"><div class="card-head open" onclick="tog(this)">Day 4 — Instructions <span class="arr">▼</span></div>
+    <div class="card-body open">
+      <div class="field"><label>What to say on Day 4 (closing)</label><textarea id="d4-instructions" placeholder="e.g. Confirm their delivery details. Tell them the parcel is being processed. Give them next steps and a timeline."></textarea></div>
+      <p style="font-size:12px;color:var(--amber);margin-top:6px">⚠ Only contacts who gave their airport location on Day 3 reach Day 4.</p>
+    </div></div>
+    <div class="card"><div class="card-head" onclick="tog(this)">Day 4 — Specific numbers to chat (VIP list) <span class="arr">▼</span></div>
+    <div class="card-body">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Add numbers you want to make sure receive Day 4 treatment, plus a specific message or instruction for each.</p>
+      <div id="d4-vip-list"></div>
+      <button class="add-btn" onclick="addVIP()">+ Add number</button>
+    </div></div>
+    <div class="card"><div class="card-head" onclick="tog(this)">Day 4 — Scheduled media & messages <span class="arr">▼</span></div>
+    <div class="card-body"><div id="d4-media"></div><button class="add-btn" onclick="addMedia(4)">+ Add photo / message to send</button></div></div>
+    <div class="save-row"><button class="btn primary" onclick="saveAll()">Save Day 4</button></div>
+  </div>
+</div>
+
+<!-- CONTACTS -->
+<div class="panel" id="p-contacts">
+  <div class="card">
+    <div class="card-head open" onclick="tog(this)">All contacts <span class="arr">▼</span></div>
+    <div class="card-body open" style="padding:0">
+      <table><thead><tr><th>Number</th><th>Name (detected)</th><th>Day</th><th>Messages</th><th>Status</th></tr></thead>
+      <tbody id="contacts-table"><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Loading...</td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- DELIVERY LEADS -->
+<div class="panel" id="p-delivery">
+  <div style="background:#E1F5EE;border:1px solid #9FE1CB;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:13px;color:#085041">
+    These contacts gave their full name, phone number and nearest airport on Day 3. They are ready for Day 4.
+  </div>
+  <div id="delivery-list"><p style="color:var(--muted);font-size:13px">No delivery details received yet.</p></div>
+</div>
+
+<!-- MANUAL SEND -->
+<div class="panel" id="p-manual">
+  <div class="send-one">
+    <h3>Send a message to one number</h3>
+    <div class="row2">
+      <div class="field"><label>Phone number (with country code)</label><input id="manual-number" placeholder="e.g. 254712345678"/></div>
+      <div class="field"><label>When to send</label><select id="manual-timing"><option value="now">Send now</option><option value="1h">In 1 hour</option><option value="2h">In 2 hours</option><option value="tomorrow">Tomorrow morning</option></select></div>
+    </div>
+    <div class="field"><label>Message</label><textarea id="manual-msg" placeholder="Type your message here..."></textarea></div>
+    <div class="save-row"><button class="btn primary" onclick="manualSend()">Send message</button></div>
+  </div>
+</div>
+
+</div><!-- /main -->
+<div class="toast" id="toast"></div>
+
+<script>
+let cfg = {};
+let mediaItems = {1:[],2:[],3:[],4:[]};
+let vipList = [];
+let blockedNumbers = [];
+
+function tab(id, btn) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('p-'+id).classList.add('active');
+  btn.classList.add('active');
+  if(id==='contacts') loadContacts();
+  if(id==='delivery') loadDelivery();
+  if(id==='overview') loadStats();
+}
+
+function dayTab(n, el) {
+  document.querySelectorAll('.day-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.day-panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('dp-'+n).classList.add('active');
+}
+
+function tog(el) {
+  el.classList.toggle('open');
+  el.nextElementSibling.classList.toggle('open');
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2500);
+}
+
+// Blocked numbers
+function addBlocked() {
+  const val = document.getElementById('new-blocked').value.trim();
+  if(!val) return;
+  if(!blockedNumbers.includes(val)) blockedNumbers.push(val);
+  document.getElementById('new-blocked').value = '';
+  renderBlocked();
+}
+function removeBlocked(n) {
+  blockedNumbers = blockedNumbers.filter(x=>x!==n);
+  renderBlocked();
+}
+function renderBlocked() {
+  document.getElementById('blocked-list').innerHTML = blockedNumbers.map(n=>
+    `<div class="blocked-tag">${n}<button onclick="removeBlocked('${n}')">×</button></div>`
+  ).join('');
+}
+
+// Media items
+function addMedia(day) {
+  const id = Date.now();
+  mediaItems[day].push({id, type:'message', url:'', caption:'', message:'', afterHours:0});
+  renderMedia(day);
+}
+function removeMedia(day, id) {
+  mediaItems[day] = mediaItems[day].filter(m=>m.id!==id);
+  renderMedia(day);
+}
+function renderMedia(day) {
+  const zone = document.getElementById(`d${day}-media`);
+  zone.innerHTML = mediaItems[day].map(m=>`
+    <div class="media-item" id="mi-${m.id}">
+      <div class="row3" style="margin-bottom:8px">
+        <div class="field" style="margin:0"><label>Type</label>
+          <select onchange="mediaType(${day},${m.id},this.value)">
+            <option value="message" ${m.type==='message'?'selected':''}>Text message</option>
+            <option value="photo" ${m.type==='photo'?'selected':''}>Photo (URL)</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0"><label>Send after (hours into day)</label>
+          <input type="number" value="${m.afterHours||0}" min="0" max="23" onchange="mediaVal(${day},${m.id},'afterHours',this.value)"/>
+        </div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:12px">
+          <button class="btn danger" onclick="removeMedia(${day},${m.id})" style="width:100%">Remove</button>
+        </div>
+      </div>
+      ${m.type==='photo'?`
+        <div class="field" style="margin-bottom:8px"><label>Photo URL</label><input value="${m.url||''}" placeholder="https://..." onchange="mediaVal(${day},${m.id},'url',this.value)"/></div>
+        <div class="field" style="margin:0"><label>Caption</label><input value="${m.caption||''}" placeholder="Caption text..." onchange="mediaVal(${day},${m.id},'caption',this.value)"/></div>
+      `:`
+        <div class="field" style="margin:0"><label>Message text</label><textarea onchange="mediaVal(${day},${m.id},'message',this.value)" placeholder="Message to send...">${m.message||''}</textarea></div>
+      `}
+    </div>
+  `).join('');
+}
+function mediaType(day, id, val) {
+  const item = mediaItems[day].find(m=>m.id===id);
+  if(item) { item.type=val; renderMedia(day); }
+}
+function mediaVal(day, id, key, val) {
+  const item = mediaItems[day].find(m=>m.id===id);
+  if(item) item[key] = val;
+}
+
+// VIP list (Day 4)
+function addVIP() {
+  vipList.push({id:Date.now(), number:'', instruction:''});
+  renderVIP();
+}
+function removeVIP(id) {
+  vipList = vipList.filter(v=>v.id!==id);
+  renderVIP();
+}
+function renderVIP() {
+  document.getElementById('d4-vip-list').innerHTML = vipList.map(v=>`
+    <div class="media-item">
+      <div class="row2" style="margin-bottom:8px">
+        <div class="field" style="margin:0"><label>Phone number</label><input value="${v.number}" placeholder="254712345678" onchange="vipVal(${v.id},'number',this.value)"/></div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:12px"><button class="btn danger" onclick="removeVIP(${v.id})" style="width:100%">Remove</button></div>
+      </div>
+      <div class="field" style="margin:0"><label>Special instruction for this person</label><textarea onchange="vipVal(${v.id},'instruction',this.value)" placeholder="e.g. Tell them their parcel arrived and confirm pickup details...">${v.instruction}</textarea></div>
+    </div>
+  `).join('');
+}
+function vipVal(id, key, val) {
+  const item = vipList.find(v=>v.id===id);
+  if(item) item[key]=val;
+}
+
+// Load & save config
+async function loadAll() {
+  const r = await fetch('/config');
+  cfg = await r.json();
+  document.getElementById('name').value = cfg.name||'';
+  document.getElementById('location').value = cfg.location||'';
+  document.getElementById('work').value = cfg.work||'';
+  document.getElementById('personality').value = cfg.personality||'';
+  document.getElementById('phrases').value = cfg.phrases||'';
+  document.getElementById('offLimits').value = cfg.offLimits||'';
+  document.getElementById('maxMessages').value = cfg.maxMessages||15;
+  blockedNumbers = cfg.blockedNumbers||[];
+  renderBlocked();
+  for(let d=1;d<=4;d++){
+    const dk = `day${d}`;
+    document.getElementById(`d${d}-instructions`).value = cfg.days?.[dk]?.instructions||'';
+    mediaItems[d] = cfg.days?.[dk]?.media||[];
+    renderMedia(d);
+  }
+  vipList = cfg.day4VIP||[];
+  renderVIP();
+}
+
+async function saveAll() {
+  const days = {};
+  for(let d=1;d<=4;d++){
+    days[`day${d}`] = {
+      instructions: document.getElementById(`d${d}-instructions`).value,
+      media: mediaItems[d]
+    };
+  }
+  const data = {
+    name: document.getElementById('name').value,
+    location: document.getElementById('location').value,
+    work: document.getElementById('work').value,
+    personality: document.getElementById('personality').value,
+    phrases: document.getElementById('phrases').value,
+    offLimits: document.getElementById('offLimits').value,
+    maxMessages: parseInt(document.getElementById('maxMessages').value)||15,
+    blockedNumbers, days, day4VIP: vipList
+  };
+  await fetch('/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  toast('✓ Saved!');
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch('/stats');
+    const s = await r.json();
+    document.getElementById('s-total').textContent = s.total||0;
+    document.getElementById('s-d1').textContent = s.day1||0;
+    document.getElementById('s-d2').textContent = s.day2||0;
+    document.getElementById('s-d3').textContent = s.day3||0;
+    document.getElementById('s-d4').textContent = s.day4||0;
+    document.getElementById('s-leads').textContent = s.readyForDay4||0;
+  } catch(e){}
+}
+
+async function loadContacts() {
+  const r = await fetch('/contacts');
+  const c = await r.json();
+  const rows = Object.entries(c).map(([num,v])=>`
+    <tr>
+      <td style="font-family:monospace;font-size:12px">${num}</td>
+      <td>${v.detectedName||'—'}</td>
+      <td><span class="badge d${v.day}">Day ${v.day}</span></td>
+      <td>${v.msgCount||0}</td>
+      <td>${v.readyForDay4?'<span class="badge ready">✓ Has delivery details</span>':v.day>=3?'Awaiting details':'Active'}</td>
+    </tr>
+  `).join('');
+  document.getElementById('contacts-table').innerHTML = rows||'<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No contacts yet</td></tr>';
+}
+
+async function loadDelivery() {
+  const r = await fetch('/stats');
+  const s = await r.json();
+  const list = s.deliveryResponses||[];
+  if(!list.length){
+    document.getElementById('delivery-list').innerHTML = '<p style="color:var(--muted);font-size:13px">No delivery details received yet.</p>';
+    return;
+  }
+  document.getElementById('delivery-list').innerHTML = list.map(d=>`
+    <div class="delivery-card">
+      <div class="name">${d.name||'Unknown name'}</div>
+      <div class="detail">
+        📞 ${d.number}<br>
+        ✈️ ${d.airport}<br>
+        🕐 ${d.time?new Date(d.time).toLocaleString():''}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function manualSend() {
+  const number = document.getElementById('manual-number').value.trim();
+  const message = document.getElementById('manual-msg').value.trim();
+  if(!number||!message) return toast('Please enter a number and message');
+  const r = await fetch('/send-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({number,message})});
+  const res = await r.json();
+  if(res.ok) { toast('✓ Message sent!'); document.getElementById('manual-msg').value=''; }
+  else toast('Error: '+res.error);
+}
+
+loadAll();
+loadStats();
+setInterval(loadStats, 30000);
+</script>
+</body>
+</html>
