@@ -172,6 +172,7 @@ app.post("/webhook", async (req, res) => {
     // Check & send scheduled media
     await checkScheduledMedia(cfg, contact, from);
 
+    console.log("Getting AI reply for:", from, "Day:", contact.day);
     // Get AI reply
     const aiRes = await axios.post(
       "https://api.anthropic.com/v1/messages",
@@ -185,12 +186,13 @@ app.post("/webhook", async (req, res) => {
     );
 
     const reply = aiRes.data.content[0].text;
+    console.log("AI replied, now sending to WhatsApp:", from);
     await sendWA(cfg, from, reply);
 
     saveContacts(contacts);
     res.sendStatus(200);
   } catch (err) {
-    console.error(err.message);
+    console.error("Full error:", JSON.stringify(err.response?.data || err.message));
     res.sendStatus(500);
   }
 });
