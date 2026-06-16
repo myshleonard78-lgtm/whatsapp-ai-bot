@@ -177,7 +177,7 @@ app.post("/webhook", async (req, res) => {
     const aiRes = await axios.post(
       "https://api.anthropic.com/v1/messages",
       {
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-5",
         max_tokens: 300,
         system: buildPrompt(cfg, contact),
         messages: [{ role: "user", content: text }],
