@@ -153,6 +153,96 @@ async function getAssistantReply(conversation) {
   return { reply: "Something took too many steps — try rephrasing that.", messages };
 }
 
+// ─── Strategy-teaching chat (dashboard) ──────────────────────
+// A separate conversation + tool from the WhatsApp assistant: this one's
+// only job is to turn a plain-English strategy description into a precise,
+// testable rule (currently: RSI threshold-based buy/sell conditions), and
+// only hand it off to the trading server once you've confirmed it's right.
+const STRATEGY_CHAT_PATH = path.join(__dirname, "strategy-chats.json");
+function loadStrategyChats() { try { return JSON.parse(fs.readFileSync(STRATEGY_CHAT_PATH, "utf8")); } catch { return {}; } }
+function saveStrategyChats(c) { fs.writeFileSync(STRATEGY_CHAT_PATH, JSON.stringify(c, null, 2)); }
+
+const STRATEGY_TOOL = {
+  name: "propose_strategy",
+  description: "Call this once you fully understand the user's strategy as a precise, testable rule. Only supports RSI-threshold rules for now (buy below a threshold, sell above a threshold). If the user describes something this can't express (multiple indicators, price patterns, etc.), do NOT call this — explain the current limitation instead and ask if they want to simplify it to an RSI rule.",
+  input_schema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "A short unique slug, e.g. 'rsi-aggressive-1'" },
+      symbol: { type: "string", description: "Deriv symbol, default 'R_100' (Volatility 100 Index) unless the user names a different one" },
+      buyOperator: { type: "string", enum: ["<", "<=", ">", ">="] },
+      buyValue: { type: "number" },
+      sellOperator: { type: "string", enum: ["<", "<=", ">", ">="] },
+      sellValue: { type: "number" },
+      description: { type: "string", description: "One-sentence plain-English summary of the strategy" },
+    },
+    required: ["id", "description"],
+  },
+};
+
+const STRATEGY_SYSTEM_PROMPT = `You are helping Mysh design a trading strategy for his automated Deriv bot, through conversation.
+Currently the bot can only execute RSI-threshold strategies: buy when RSI crosses below a value, sell when it crosses above a value (either direction is optional).
+
+Ask clarifying questions until you're confident you understand exactly what he wants (which symbol, what RSI thresholds, whether he wants both a buy and sell side or just one).
+Keep responses short and conversational.
+Once you're confident, call propose_strategy with the precise rule. Don't call it prematurely — confirm understanding first if anything is ambiguous.
+If what he describes needs more than a single RSI threshold (e.g. multiple indicators, candlestick patterns, price action), say clearly that only RSI-threshold rules are supported right now, and offer to express the closest RSI-based approximation instead.`;
+
+app.post("/strategy-chat", async (req, res) => {
+  try {
+    const { conversationId, message } = req.body;
+    const chats = loadStrategyChats();
+    const prior = chats[conversationId] || [];
+
+    const messages = [...prior, { role: "user", content: message }];
+
+    const aiRes = await axios.post(
+      "https://api.anthropic.com/v1/messages",
+      { model: "claude-sonnet-4-5", max_tokens: 500, system: STRATEGY_SYSTEM_PROMPT, tools: [STRATEGY_TOOL], messages },
+      { headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" } }
+    );
+
+    const { content, stop_reason } = aiRes.data;
+    messages.push({ role: "assistant", content });
+    chats[conversationId] = messages.slice(-20);
+    saveStrategyChats(chats);
+
+    const textBlock = content.find((b) => b.type === "text");
+    const proposal = content.find((b) => b.type === "tool_use" && b.name === "propose_strategy");
+
+    res.json({
+      reply: textBlock ? textBlock.text : (proposal ? "Here's what I've got — take a look below." : "..."),
+      proposal: proposal ? proposal.input : null,
+    });
+  } catch (err) {
+    console.error("strategy-chat error:", err.response?.data || err.message);
+    res.status(500).json({ error: "strategy chat failed" });
+  }
+});
+
+app.post("/strategy-confirm", async (req, res) => {
+  try {
+    const { proposal } = req.body;
+    const definition = {
+      id: proposal.id,
+      symbol: proposal.symbol || "R_100",
+      indicator: "rsi",
+      description: proposal.description,
+    };
+    if (proposal.buyOperator && proposal.buyValue !== undefined) {
+      definition.buyWhen = { operator: proposal.buyOperator, value: proposal.buyValue };
+    }
+    if (proposal.sellOperator && proposal.sellValue !== undefined) {
+      definition.sellWhen = { operator: proposal.sellOperator, value: proposal.sellValue };
+    }
+
+    const result = await tradingPost("/strategies", { definition });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || err.message });
+  }
+});
+
 // ─── Webhook verification ────────────────────────────────────
 app.get("/webhook", (req, res) => {
   if (req.query["hub.verify_token"] === process.env.VERIFY_TOKEN) res.send(req.query["hub.challenge"]);
@@ -214,12 +304,17 @@ app.get("/trading-data", async (req, res) => {
 
 app.post("/trading-control", async (req, res) => {
   try {
-    const { action, mode } = req.body;
+    const { action, mode, strategyId } = req.body;
     let result;
     if (action === "halt") result = await tradingPost("/halt", { reason: "halted from dashboard" });
     else if (action === "resume") result = await tradingPost("/resume");
     else if (action === "mode") result = await tradingPost("/mode", { mode });
-    else return res.status(400).json({ error: "unknown action" });
+    else if (action === "remove_strategy") {
+      const delRes = await axios.delete(`${TRADING_SERVER_URL}/strategies/${strategyId}`, {
+        data: { secret: TRADING_SERVER_SECRET },
+      });
+      result = delRes.data;
+    } else return res.status(400).json({ error: "unknown action" });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.response?.data || err.message });
