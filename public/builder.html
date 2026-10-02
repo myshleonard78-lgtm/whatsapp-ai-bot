@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Strategy Builder — Trading Desk</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<nav class="sidebar">
+  <div class="brand">Ledger</div>
+  <div class="brand-sub">Mysh's Trading Desk</div>
+  <div class="nav">
+    <a href="overview.html">Overview</a>
+    <a href="positions.html">Positions</a>
+    <a href="strategies.html">Strategies</a>
+    <a href="builder.html" class="active">Strategy Builder</a>
+    <a href="history.html">History</a>
+  </div>
+  <div class="sidebar-footer">
+    <div><span class="live-dot" id="sidebarDot"></span><span class="muted">Status</span></div>
+    <div class="sidebar-status" id="sidebarStatus">Loading…</div>
+  </div>
+</nav>
+
+<main class="main">
+  <h1 class="page-title">Strategy Builder</h1>
+  <p class="muted" style="margin-top:-14px; margin-bottom:22px;">
+    Describe a strategy in plain English. I'll ask questions until I understand it exactly, then show the precise rule before anything starts testing. Currently supports RSI-threshold rules only.
+  </p>
+
+  <div class="card">
+    <div class="chat-log" id="chatLog"></div>
+    <div id="proposalArea"></div>
+    <div class="chat-input-row">
+      <input id="chatInput" type="text" placeholder="e.g. Buy when RSI drops below 25 on Volatility 100..." onkeydown="if(event.key==='Enter') sendChat()" />
+      <button class="primary" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+</main>
+
+<script src="app.js"></script>
+<script>
+const chatConversationId = 'dashboard-' + Date.now();
+let lastProposal = null;
+
+function addChatMsg(text, who) {
+  const log = document.getElementById('chatLog');
+  const div = document.createElement('div');
+  div.className = 'msg ' + who;
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const message = input.value.trim();
+  if (!message) return;
+  addChatMsg(message, 'user');
+  input.value = '';
+
+  const res = await fetch('/strategy-chat', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ conversationId: chatConversationId, message })
+  });
+  const data = await res.json();
+  addChatMsg(data.reply, 'ai');
+
+  const area = document.getElementById('proposalArea');
+  if (data.proposal) {
+    lastProposal = data.proposal;
+    const p = data.proposal;
+    area.innerHTML = `
+      <div class="proposal-box">
+        <strong class="serif">${p.id}</strong>
+        <div>${p.description}</div>
+        <div class="mono muted">Symbol: ${p.symbol || 'R_100'}</div>
+        ${p.buyOperator ? `<div class="mono">Buy when RSI ${p.buyOperator} ${p.buyValue}</div>` : ''}
+        ${p.sellOperator ? `<div class="mono">Sell when RSI ${p.sellOperator} ${p.sellValue}</div>` : ''}
+        <div style="margin-top:10px;">
+          <button class="primary" onclick="confirmStrategy()">Start testing this strategy</button>
+        </div>
+      </div>`;
+  }
+}
+
+async function confirmStrategy() {
+  if (!lastProposal) return;
+  const res = await fetch('/strategy-confirm', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ proposal: lastProposal })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    addChatMsg(`"${lastProposal.id}" is now live on demo and being tested.`, 'ai');
+    document.getElementById('proposalArea').innerHTML = '';
+    lastProposal = null;
+  } else {
+    addChatMsg('Failed to add that strategy: ' + (data.error?.error || JSON.stringify(data.error)), 'ai');
+  }
+}
+</script>
+</body>
+</html>
+
