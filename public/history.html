@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>History — Trading Desk</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<nav class="sidebar">
+  <div class="brand">Ledger</div>
+  <div class="brand-sub">Mysh's Trading Desk</div>
+  <div class="nav">
+    <a href="overview.html">Overview</a>
+    <a href="positions.html">Positions</a>
+    <a href="strategies.html">Strategies</a>
+    <a href="builder.html">Strategy Builder</a>
+    <a href="history.html" class="active">History</a>
+  </div>
+  <div class="sidebar-footer">
+    <div><span class="live-dot" id="sidebarDot"></span><span class="muted">Status</span></div>
+    <div class="sidebar-status" id="sidebarStatus">Loading…</div>
+  </div>
+</nav>
+
+<main class="main">
+  <h1 class="page-title">Trade History</h1>
+  <p class="muted" style="margin-top:-14px; margin-bottom:22px;">Most recent trades across every strategy, newest first.</p>
+
+  <div class="card">
+    <table id="historyTable">
+      <thead><tr><th>Strategy</th><th>Closed</th><th>Result</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="empty" id="emptyState" style="display:none;">No closed trades yet.</div>
+  </div>
+</main>
+
+<script src="app.js"></script>
+<script>
+async function refresh() {
+  const d = await fetchData();
+  const all = [];
+  (d.strategies || []).forEach(s => {
+    (s.recentTrades || []).forEach(t => all.push({ strategyId: s.strategyId, ...t }));
+  });
+  all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  const tbody = document.querySelector('#historyTable tbody');
+  tbody.innerHTML = '';
+  document.getElementById('emptyState').style.display = all.length ? 'none' : 'block';
+  document.getElementById('historyTable').style.display = all.length ? 'table' : 'none';
+
+  all.slice(0, 50).forEach(t => {
+    const tr = document.createElement('tr');
+    const pnlCls = t.pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+    tr.innerHTML = `<td>${t.strategyId}</td>
+      <td class="mono">${new Date(t.timestamp).toLocaleString()}</td>
+      <td class="num ${pnlCls}">${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+refresh();
+setInterval(refresh, 6000);
+</script>
+</body>
+</html>
