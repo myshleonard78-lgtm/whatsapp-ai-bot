@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Strategies — Trading Desk</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<nav class="sidebar">
+  <div class="brand">Ledger</div>
+  <div class="brand-sub">Mysh's Trading Desk</div>
+  <div class="nav">
+    <a href="overview.html">Overview</a>
+    <a href="positions.html">Positions</a>
+    <a href="strategies.html" class="active">Strategies</a>
+    <a href="builder.html">Strategy Builder</a>
+    <a href="history.html">History</a>
+  </div>
+  <div class="sidebar-footer">
+    <div><span class="live-dot" id="sidebarDot"></span><span class="muted">Status</span></div>
+    <div class="sidebar-status" id="sidebarStatus">Loading…</div>
+  </div>
+</nav>
+
+<main class="main">
+  <h1 class="page-title">Strategies</h1>
+  <p class="muted" style="margin-top:-14px; margin-bottom:22px;">
+    Every strategy needs ≥40 trades, ≥80% win rate, and a profit factor above 1.5 to pass the demo trial before it can move to live trading.
+  </p>
+
+  <div class="grid" id="strategyCards"></div>
+  <div class="empty" id="emptyState" style="display:none;">No strategies running yet — add one in the Strategy Builder.</div>
+</main>
+
+<script src="app.js"></script>
+<script>
+window.onControlDone = refresh;
+
+function renderStrategies(strategies) {
+  const container = document.getElementById('strategyCards');
+  container.innerHTML = '';
+  document.getElementById('emptyState').style.display = strategies.length ? 'none' : 'block';
+
+  strategies.forEach(s => {
+    const pct = Math.min(100, (s.tradeCount / s.gateMinTrades) * 100);
+    const statusCls = s.status === 'promoted' ? 'green' : s.status === 'discarded' ? 'red' : 'amber';
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <h2 style="display:flex; justify-content:space-between; align-items:center;">
+        <span>${s.strategyId}</span>
+        <span class="badge ${statusCls}">${s.status}</span>
+      </h2>
+      <div class="row"><span>Trades</span><span class="mono">${s.tradeCount} / ${s.gateMinTrades}</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      <div class="row" style="margin-top:10px;"><span>Win rate</span><span class="mono">${s.winRatePct}% <span class="muted">/ ${s.gateMinWinRatePct}%</span></span></div>
+      <div class="row"><span>Profit factor</span><span class="mono">${s.profitFactor ?? '∞'} <span class="muted">/ ${s.gateMinProfitFactor}</span></span></div>
+      <div class="row"><span>Drawdown</span><span class="mono">${s.drawdownPct}%</span></div>
+      <div class="row" style="margin-top:10px;">
+        <span class="strategy-remove" onclick="removeStrategy('${s.strategyId}')">Remove strategy</span>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+async function refresh() {
+  const d = await fetchData();
+  renderStrategies(d.strategies || []);
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
