@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Overview — Trading Desk</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="brand">Ledger</div>
+  <div class="brand-sub">Mysh's Trading Desk</div>
+  <div class="nav">
+    <a href="overview.html" class="active">Overview</a>
+    <a href="positions.html">Positions</a>
+    <a href="strategies.html">Strategies</a>
+    <a href="builder.html">Strategy Builder</a>
+    <a href="history.html">History</a>
+  </div>
+  <div class="sidebar-footer">
+    <div><span class="live-dot" id="sidebarDot"></span><span class="muted">Status</span></div>
+    <div class="sidebar-status" id="sidebarStatus">Loading…</div>
+  </div>
+</nav>
+
+<main class="main">
+  <h1 class="page-title">Overview</h1>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Balance</h2>
+      <div class="figure" id="balance">—</div>
+      <div class="row" style="margin-top:10px;"><span>Today's P&L</span><span id="todaysPnl" class="mono">—</span></div>
+    </div>
+    <div class="card">
+      <h2>Risk</h2>
+      <div class="row"><span>Today's loss</span><span id="todaysLoss" class="mono">—</span></div>
+      <div class="row"><span>Daily cap</span><span id="dailyCap" class="mono">—</span></div>
+      <div class="bar-track"><div class="bar-fill" id="lossBar" style="width:0%; background:var(--red);"></div></div>
+      <div class="row" style="margin-top:8px;"><span>Risk per trade</span><span id="riskPct" class="mono">—</span></div>
+    </div>
+    <div class="card">
+      <h2>Mode & Connection</h2>
+      <div class="row"><span>Mode</span><span id="mode" class="badge amber">—</span></div>
+      <div class="row"><span>Connection</span><span id="conn" class="badge">—</span></div>
+      <div class="row"><span>Trading</span><span id="halted" class="badge">—</span></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px;">
+    <h2>Controls</h2>
+    <button class="danger" onclick="control('halt')">Halt Trading</button>
+    <button class="primary" onclick="control('resume')">Resume Trading</button>
+    <span style="display:inline-block; width:16px;"></span>
+    <button onclick="control('mode','demo')">Switch to Demo</button>
+    <button onclick="control('mode','live')">Switch to Live</button>
+  </div>
+
+  <div class="card">
+    <h2>Equity</h2>
+    <canvas id="equityChart"></canvas>
+  </div>
+
+  <div class="muted" id="updatedAt" style="margin-top:18px;"></div>
+</main>
+
+<script src="app.js"></script>
+<script>
+let equityChart; const equityPoints = [];
+window.onControlDone = refresh;
+
+function setBadge(el, text, cls) { el.textContent = text; el.className = 'badge ' + cls; }
+
+function updateEquityChart(balance) {
+  equityPoints.push(balance);
+  if (equityPoints.length > 50) equityPoints.shift();
+  const data = { labels: equityPoints.map((_,i)=>i), datasets: [{ data: equityPoints, borderColor: '#c99248', backgroundColor: 'rgba(201,146,72,0.08)', fill: true, tension: 0.3, pointRadius: 0 }] };
+  if (!equityChart) {
+    equityChart = new Chart(document.getElementById('equityChart'), {
+      type: 'line', data,
+      options: { plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{ticks:{color:'#8b93a0', font:{family:'IBM Plex Mono'}}, grid:{color:'#2b3542'}}} }
+    });
+  } else {
+    equityChart.data.labels = data.labels;
+    equityChart.data.datasets[0].data = equityPoints;
+    equityChart.update('none');
+  }
+}
+
+async function refresh() {
+  const d = await fetchData();
+  setBadge(document.getElementById('mode'), d.mode.toUpperCase(), d.mode === 'live' ? 'red' : 'amber');
+  setBadge(document.getElementById('conn'), d.connected ? 'Connected' : 'Disconnected', d.connected ? 'green' : 'red');
+  setBadge(document.getElementById('halted'), d.halted ? 'Halted' : 'Active', d.halted ? 'red' : 'green');
+
+  document.getElementById('balance').textContent = fmt(d.balance);
+  const pnl = -d.todaysLoss;
+  const pnlEl = document.getElementById('todaysPnl');
+  pnlEl.textContent = (pnl >= 0 ? '+' : '') + fmt(pnl);
+  pnlEl.className = 'mono ' + (pnl >= 0 ? 'pnl-pos' : 'pnl-neg');
+
+  document.getElementById('todaysLoss').textContent = fmt(d.todaysLoss);
+  document.getElementById('dailyCap').textContent = fmt(d.dailyLossLimit);
+  document.getElementById('riskPct').textContent = d.riskPerTradePct + '%';
+  document.getElementById('lossBar').style.width = Math.min(100, (d.todaysLoss / d.dailyLossLimit) * 100) + '%';
+
+  updateEquityChart(d.balance);
+  document.getElementById('updatedAt').textContent = 'Last updated ' + new Date(d.updatedAt).toLocaleTimeString();
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
