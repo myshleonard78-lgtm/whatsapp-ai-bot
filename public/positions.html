@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Positions — Trading Desk</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<nav class="sidebar">
+  <div class="brand">Ledger</div>
+  <div class="brand-sub">Mysh's Trading Desk</div>
+  <div class="nav">
+    <a href="overview.html">Overview</a>
+    <a href="positions.html" class="active">Positions</a>
+    <a href="strategies.html">Strategies</a>
+    <a href="builder.html">Strategy Builder</a>
+    <a href="history.html">History</a>
+  </div>
+  <div class="sidebar-footer">
+    <div><span class="live-dot" id="sidebarDot"></span><span class="muted">Status</span></div>
+    <div class="sidebar-status" id="sidebarStatus">Loading…</div>
+  </div>
+</nav>
+
+<main class="main">
+  <h1 class="page-title">Open Positions</h1>
+
+  <div class="card">
+    <table id="positionsTable">
+      <thead><tr><th>Type</th><th>Symbol</th><th>Stake</th><th>Payout</th><th>Started</th><th>Expires in</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="empty" id="emptyState" style="display:none;">No open positions right now — the bot is watching for a signal.</div>
+  </div>
+
+  <div class="muted" id="updatedAt" style="margin-top:18px;"></div>
+</main>
+
+<script src="app.js"></script>
+<script>
+function renderPositions(positions) {
+  const tbody = document.querySelector('#positionsTable tbody');
+  tbody.innerHTML = '';
+  document.getElementById('emptyState').style.display = positions.length ? 'none' : 'block';
+  document.getElementById('positionsTable').style.display = positions.length ? 'table' : 'none';
+
+  positions.forEach(p => {
+    const tr = document.createElement('tr');
+    const expiresIn = Math.max(0, Math.round(p.expiry_time - Date.now()/1000));
+    const started = p.date_start ? new Date(p.date_start * 1000).toLocaleTimeString() : '—';
+    const typeCls = p.contract_type === 'CALL' ? 'pnl-pos' : 'pnl-neg';
+    tr.innerHTML = `<td class="${typeCls}">${p.contract_type || '—'}</td>
+      <td>${p.underlying_symbol || '—'}</td>
+      <td class="num">$${(p.buy_price||0).toFixed(2)}</td>
+      <td class="num">$${(p.payout||0).toFixed(2)}</td>
+      <td class="mono">${started}</td>
+      <td class="mono">${expiresIn}s</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function refresh() {
+  const d = await fetchData();
+  renderPositions(d.openPositions || []);
+  document.getElementById('updatedAt').textContent = 'Last updated ' + new Date(d.updatedAt).toLocaleTimeString();
+}
+refresh();
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>
