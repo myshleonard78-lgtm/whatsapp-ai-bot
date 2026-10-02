@@ -1,279 +1,112 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Trading Dashboard</title>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Overview — Trading Desk</title>
+<link rel="stylesheet" href="styles.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<style>
-  :root {
-    --bg: #0b0f14; --card: #131a22; --border: #1f2a35; --text: #e6edf3;
-    --muted: #8b98a5; --green: #3fb950; --red: #f85149; --yellow: #d29922; --accent: #58a6ff;
-  }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font-family: -apple-system, system-ui, sans-serif; padding:16px; }
-  h1 { font-size:18px; margin:0 0 16px; }
-  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap:12px; margin-bottom:16px; }
-  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; }
-  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin:0 0 8px; }
-  .big { font-size:24px; font-weight:600; }
-  .row { display:flex; justify-content:space-between; align-items:center; margin:6px 0; font-size:14px; }
-  .badge { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; }
-  .badge.green { background:rgba(63,185,80,0.15); color:var(--green); }
-  .badge.red { background:rgba(248,81,73,0.15); color:var(--red); }
-  .badge.yellow { background:rgba(210,153,34,0.15); color:var(--yellow); }
-  .badge.blue { background:rgba(88,166,255,0.15); color:var(--accent); }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th, td { text-align:left; padding:6px 4px; border-bottom:1px solid var(--border); }
-  th { color:var(--muted); font-weight:500; }
-  .pnl-pos { color:var(--green); } .pnl-neg { color:var(--red); }
-  .bar-track { background:#1f2a35; border-radius:6px; height:8px; overflow:hidden; margin-top:6px; }
-  .bar-fill { background:var(--accent); height:100%; }
-  button { background:var(--card); border:1px solid var(--border); color:var(--text); padding:8px 14px; border-radius:8px; cursor:pointer; font-size:13px; margin-right:8px; }
-  button.danger { border-color:var(--red); color:var(--red); }
-  button.primary { border-color:var(--accent); color:var(--accent); }
-  button:disabled { opacity:0.5; cursor:not-allowed; }
-  .muted { color:var(--muted); font-size:12px; }
-  canvas { max-height:160px; }
-  .chat-log { max-height:260px; overflow-y:auto; margin-bottom:10px; padding-right:4px; }
-  .msg { padding:8px 12px; border-radius:10px; margin:6px 0; font-size:14px; max-width:85%; line-height:1.4; }
-  .msg.user { background:var(--accent); color:#04101f; margin-left:auto; }
-  .msg.ai { background:#1a232c; }
-  .chat-input-row { display:flex; gap:8px; }
-  .chat-input-row input { flex:1; background:#0f151b; border:1px solid var(--border); color:var(--text); padding:10px; border-radius:8px; font-size:14px; }
-  .proposal-box { background:#0f151b; border:1px solid var(--accent); border-radius:10px; padding:12px; margin-top:10px; font-size:13px; }
-  .proposal-box div { margin:3px 0; }
-  .strategy-remove { color:var(--red); cursor:pointer; font-size:12px; float:right; }
-</style>
 </head>
 <body>
-<h1>🤖 Forex Trading Bot — Live Dashboard</h1>
+<nav class="sidebar">
+  <div class="brand">Ledger</div>
+  <div class="brand-sub">Mysh's Trading Desk</div>
+  <div class="nav">
+    <a href="overview.html" class="active">Overview</a>
+    <a href="positions.html">Positions</a>
+    <a href="strategies.html">Strategies</a>
+    <a href="builder.html">Strategy Builder</a>
+    <a href="history.html">History</a>
+  </div>
+  <div class="sidebar-footer">
+    <div><span class="live-dot" id="sidebarDot"></span><span class="muted">Status</span></div>
+    <div class="sidebar-status" id="sidebarStatus">Loading…</div>
+  </div>
+</nav>
 
-<div class="grid">
-  <div class="card">
-    <h2>Status</h2>
-    <div class="row"><span>Mode</span><span id="mode" class="badge blue">—</span></div>
-    <div class="row"><span>Connection</span><span id="conn" class="badge">—</span></div>
-    <div class="row"><span>Trading</span><span id="halted" class="badge">—</span></div>
-    <div style="margin-top:10px;">
-      <button class="danger" onclick="control('halt')">Halt</button>
-      <button class="primary" onclick="control('resume')">Resume</button>
+<main class="main">
+  <h1 class="page-title">Overview</h1>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Balance</h2>
+      <div class="figure" id="balance">—</div>
+      <div class="row" style="margin-top:10px;"><span>Today's P&L</span><span id="todaysPnl" class="mono">—</span></div>
     </div>
-    <div style="margin-top:8px;">
-      <button onclick="control('mode','demo')">Switch to Demo</button>
-      <button onclick="control('mode','live')">Switch to Live</button>
+    <div class="card">
+      <h2>Risk</h2>
+      <div class="row"><span>Today's loss</span><span id="todaysLoss" class="mono">—</span></div>
+      <div class="row"><span>Daily cap</span><span id="dailyCap" class="mono">—</span></div>
+      <div class="bar-track"><div class="bar-fill" id="lossBar" style="width:0%; background:var(--red);"></div></div>
+      <div class="row" style="margin-top:8px;"><span>Risk per trade</span><span id="riskPct" class="mono">—</span></div>
+    </div>
+    <div class="card">
+      <h2>Mode & Connection</h2>
+      <div class="row"><span>Mode</span><span id="mode" class="badge amber">—</span></div>
+      <div class="row"><span>Connection</span><span id="conn" class="badge">—</span></div>
+      <div class="row"><span>Trading</span><span id="halted" class="badge">—</span></div>
     </div>
   </div>
 
-  <div class="card">
-    <h2>Balance & Risk</h2>
-    <div class="big" id="balance">—</div>
-    <div class="row"><span>Today's loss</span><span id="todaysLoss">—</span></div>
-    <div class="row"><span>Daily cap</span><span id="dailyCap">—</span></div>
-    <div class="bar-track"><div class="bar-fill" id="lossBar" style="width:0%; background:var(--red);"></div></div>
-    <div class="row" style="margin-top:8px;"><span>Risk per trade</span><span id="riskPct">—</span></div>
+  <div class="card" style="margin-bottom:20px;">
+    <h2>Controls</h2>
+    <button class="danger" onclick="control('halt')">Halt Trading</button>
+    <button class="primary" onclick="control('resume')">Resume Trading</button>
+    <span style="display:inline-block; width:16px;"></span>
+    <button onclick="control('mode','demo')">Switch to Demo</button>
+    <button onclick="control('mode','live')">Switch to Live</button>
   </div>
 
   <div class="card">
     <h2>Equity</h2>
     <canvas id="equityChart"></canvas>
   </div>
-</div>
 
-<div class="card" style="margin-bottom:16px;">
-  <h2>Open Positions</h2>
-  <table id="positionsTable">
-    <thead><tr><th>Type</th><th>Symbol</th><th>Stake</th><th>Payout</th><th>Expires</th></tr></thead>
-    <tbody></tbody>
-  </table>
-  <div class="muted" id="noPositions" style="display:none;">No open positions right now.</div>
-</div>
+  <div class="muted" id="updatedAt" style="margin-top:18px;"></div>
+</main>
 
-<div class="grid" id="strategyCards"></div>
-
-<div class="card" style="margin-top:16px;">
-  <h2>🧠 Teach a Strategy</h2>
-  <div class="muted" style="margin-bottom:10px;">Describe your strategy in plain English. I'll ask questions until I understand it exactly, then show you the precise rule before anything starts testing.</div>
-  <div class="chat-log" id="chatLog"></div>
-  <div id="proposalArea"></div>
-  <div class="chat-input-row">
-    <input id="chatInput" type="text" placeholder="e.g. Buy when RSI drops below 25 on Volatility 100..." onkeydown="if(event.key==='Enter') sendChat()" />
-    <button class="primary" onclick="sendChat()">Send</button>
-  </div>
-</div>
-
-<div class="muted" id="updatedAt" style="margin-top:16px;"></div>
-
+<script src="app.js"></script>
 <script>
-let equityChart;
-const equityPoints = [];
+let equityChart; const equityPoints = [];
+window.onControlDone = refresh;
 
-function fmt(n) { return typeof n === 'number' ? '$' + n.toFixed(2) : '—'; }
-
-function setBadge(el, text, cls) {
-  el.textContent = text;
-  el.className = 'badge ' + cls;
-}
-
-async function control(action, mode) {
-  if (!confirm(`Confirm: ${action}${mode ? ' → ' + mode : ''}?`)) return;
-  const res = await fetch('/trading-control', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ action, mode })
-  });
-  if (!res.ok) alert('Action failed — check logs.');
-  refresh();
-}
-
-function renderPositions(positions) {
-  const tbody = document.querySelector('#positionsTable tbody');
-  tbody.innerHTML = '';
-  document.getElementById('noPositions').style.display = positions.length ? 'none' : 'block';
-  positions.forEach(p => {
-    const tr = document.createElement('tr');
-    const expiresIn = Math.max(0, Math.round(p.expiry_time - Date.now()/1000));
-    tr.innerHTML = `<td>${p.contract_type || '—'}</td><td>${p.underlying_symbol || '—'}</td>
-      <td>$${(p.buy_price||0).toFixed(2)}</td><td>$${(p.payout||0).toFixed(2)}</td>
-      <td>${expiresIn}s</td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-function renderStrategies(strategies) {
-  const container = document.getElementById('strategyCards');
-  container.innerHTML = '';
-  strategies.forEach(s => {
-    const pct = Math.min(100, (s.tradeCount / s.gateMinTrades) * 100);
-    const statusCls = s.status === 'promoted' ? 'green' : s.status === 'discarded' ? 'red' : 'blue';
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = `
-      <h2>${s.strategyId}
-        <span class="strategy-remove" onclick="removeStrategy('${s.strategyId}')">remove ✕</span>
-        <span class="badge ${statusCls}" style="float:right; margin-right:8px;">${s.status}</span>
-      </h2>
-      <div class="row"><span>Trades</span><span>${s.tradeCount} / ${s.gateMinTrades}</span></div>
-      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
-      <div class="row" style="margin-top:8px;"><span>Win rate</span><span>${s.winRatePct}% (need ${s.gateMinWinRatePct}%)</span></div>
-      <div class="row"><span>Profit factor</span><span>${s.profitFactor ?? '∞'} (need ${s.gateMinProfitFactor})</span></div>
-      <div class="row"><span>Drawdown</span><span>${s.drawdownPct}%</span></div>
-    `;
-    container.appendChild(card);
-  });
-}
-
-async function removeStrategy(id) {
-  if (!confirm(`Remove strategy "${id}"? This stops it from trading further.`)) return;
-  await fetch('/trading-control', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ action: 'remove_strategy', strategyId: id })
-  });
-  refresh();
-}
-
-// ─── Strategy-teaching chat ───────────────────────────────────
-const chatConversationId = 'dashboard-' + Date.now();
-let lastProposal = null;
-
-function addChatMsg(text, who) {
-  const log = document.getElementById('chatLog');
-  const div = document.createElement('div');
-  div.className = 'msg ' + who;
-  div.textContent = text;
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-}
-
-async function sendChat() {
-  const input = document.getElementById('chatInput');
-  const message = input.value.trim();
-  if (!message) return;
-  addChatMsg(message, 'user');
-  input.value = '';
-
-  const res = await fetch('/strategy-chat', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ conversationId: chatConversationId, message })
-  });
-  const data = await res.json();
-  addChatMsg(data.reply, 'ai');
-
-  const area = document.getElementById('proposalArea');
-  if (data.proposal) {
-    lastProposal = data.proposal;
-    const p = data.proposal;
-    area.innerHTML = `
-      <div class="proposal-box">
-        <strong>Proposed strategy: ${p.id}</strong>
-        <div>${p.description}</div>
-        <div>Symbol: ${p.symbol || 'R_100'}</div>
-        ${p.buyOperator ? `<div>Buy when RSI ${p.buyOperator} ${p.buyValue}</div>` : ''}
-        ${p.sellOperator ? `<div>Sell when RSI ${p.sellOperator} ${p.sellValue}</div>` : ''}
-        <div style="margin-top:8px;">
-          <button class="primary" onclick="confirmStrategy()">✅ Start Testing This Strategy</button>
-        </div>
-      </div>`;
-  }
-}
-
-async function confirmStrategy() {
-  if (!lastProposal) return;
-  const res = await fetch('/strategy-confirm', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ proposal: lastProposal })
-  });
-  const data = await res.json();
-  if (data.ok) {
-    addChatMsg(`✅ "${lastProposal.id}" is now live on demo and being tested.`, 'ai');
-    document.getElementById('proposalArea').innerHTML = '';
-    lastProposal = null;
-    refresh();
-  } else {
-    addChatMsg('❌ Failed to add that strategy: ' + (data.error?.error || JSON.stringify(data.error)), 'ai');
-  }
-}
+function setBadge(el, text, cls) { el.textContent = text; el.className = 'badge ' + cls; }
 
 function updateEquityChart(balance) {
   equityPoints.push(balance);
   if (equityPoints.length > 50) equityPoints.shift();
+  const data = { labels: equityPoints.map((_,i)=>i), datasets: [{ data: equityPoints, borderColor: '#c99248', backgroundColor: 'rgba(201,146,72,0.08)', fill: true, tension: 0.3, pointRadius: 0 }] };
   if (!equityChart) {
     equityChart = new Chart(document.getElementById('equityChart'), {
-      type: 'line',
-      data: { labels: equityPoints.map((_,i)=>i), datasets: [{ data: equityPoints, borderColor: '#58a6ff', tension: 0.3, pointRadius: 0 }] },
-      options: { plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{ticks:{color:'#8b98a5'}}} }
+      type: 'line', data,
+      options: { plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{ticks:{color:'#8b93a0', font:{family:'IBM Plex Mono'}}, grid:{color:'#2b3542'}}} }
     });
   } else {
-    equityChart.data.labels = equityPoints.map((_,i)=>i);
+    equityChart.data.labels = data.labels;
     equityChart.data.datasets[0].data = equityPoints;
     equityChart.update('none');
   }
 }
 
 async function refresh() {
-  try {
-    const res = await fetch('/trading-data');
-    const d = await res.json();
+  const d = await fetchData();
+  setBadge(document.getElementById('mode'), d.mode.toUpperCase(), d.mode === 'live' ? 'red' : 'amber');
+  setBadge(document.getElementById('conn'), d.connected ? 'Connected' : 'Disconnected', d.connected ? 'green' : 'red');
+  setBadge(document.getElementById('halted'), d.halted ? 'Halted' : 'Active', d.halted ? 'red' : 'green');
 
-    setBadge(document.getElementById('mode'), d.mode.toUpperCase(), d.mode === 'live' ? 'red' : 'blue');
-    setBadge(document.getElementById('conn'), d.connected ? 'Connected' : 'Disconnected', d.connected ? 'green' : 'red');
-    setBadge(document.getElementById('halted'), d.halted ? 'Halted' : 'Active', d.halted ? 'yellow' : 'green');
+  document.getElementById('balance').textContent = fmt(d.balance);
+  const pnl = -d.todaysLoss;
+  const pnlEl = document.getElementById('todaysPnl');
+  pnlEl.textContent = (pnl >= 0 ? '+' : '') + fmt(pnl);
+  pnlEl.className = 'mono ' + (pnl >= 0 ? 'pnl-pos' : 'pnl-neg');
 
-    document.getElementById('balance').textContent = fmt(d.balance);
-    document.getElementById('todaysLoss').textContent = fmt(d.todaysLoss);
-    document.getElementById('dailyCap').textContent = fmt(d.dailyLossLimit);
-    document.getElementById('riskPct').textContent = d.riskPerTradePct + '%';
-    document.getElementById('lossBar').style.width = Math.min(100, (d.todaysLoss / d.dailyLossLimit) * 100) + '%';
+  document.getElementById('todaysLoss').textContent = fmt(d.todaysLoss);
+  document.getElementById('dailyCap').textContent = fmt(d.dailyLossLimit);
+  document.getElementById('riskPct').textContent = d.riskPerTradePct + '%';
+  document.getElementById('lossBar').style.width = Math.min(100, (d.todaysLoss / d.dailyLossLimit) * 100) + '%';
 
-    renderPositions(d.openPositions || []);
-    renderStrategies(d.strategies || []);
-    updateEquityChart(d.balance);
-
-    document.getElementById('updatedAt').textContent = 'Last updated: ' + new Date(d.updatedAt).toLocaleTimeString();
-  } catch (err) {
-    console.error('refresh failed', err);
-  }
+  updateEquityChart(d.balance);
+  document.getElementById('updatedAt').textContent = 'Last updated ' + new Date(d.updatedAt).toLocaleTimeString();
 }
-
 refresh();
 setInterval(refresh, 5000);
 </script>
