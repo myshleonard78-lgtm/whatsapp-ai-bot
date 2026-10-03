@@ -47,9 +47,9 @@ async function downloadWhatsAppMedia(mediaId) {
 }
 
 // ─── Trading server API helpers ─────────────────────────────
-async function tradingGet(endpoint) {
+async function tradingGet(endpoint, extraParams = {}) {
   const res = await axios.get(`${TRADING_SERVER_URL}${endpoint}`, {
-    params: { key: TRADING_SERVER_SECRET },
+    params: { key: TRADING_SERVER_SECRET, ...extraParams },
   });
   return res.data;
 }
@@ -180,25 +180,38 @@ const STRATEGY_TOOL = {
   },
 };
 
-const STRATEGY_SYSTEM_PROMPT = `You are helping Mysh design a trading strategy for his automated Deriv bot, through conversation.
-Currently the bot can only execute RSI-threshold strategies: buy when RSI crosses below a value, sell when it crosses above a value (either direction is optional).
+function buildStrategySystemPrompt(marketType, symbol) {
+  const base = `You are helping Mysh design a trading strategy for his automated Deriv bot, through conversation.
+He's designing a strategy for the "${marketType || 'Rise/Fall'}" market type on symbol ${symbol || 'R_100'}.
+He can see a live visualization while talking to you — a real price chart for Rise/Fall, or live digit-frequency circles (last 1000 ticks) for digit-based types — so refer to what he's watching when relevant.
 
-Ask clarifying questions until you're confident you understand exactly what he wants (which symbol, what RSI thresholds, whether he wants both a buy and sell side or just one).
-Keep responses short and conversational.
+Ask clarifying questions until you're confident you understand exactly what he wants.
+Keep responses short and conversational.`;
+
+  if (marketType && marketType !== "Rise/Fall") {
+    return `${base}
+
+IMPORTANT: Live execution currently only supports Rise/Fall (RSI-threshold) strategies. For "${marketType}", you can fully discuss and refine the idea with him (which digits, thresholds, patterns he's watching for), but do NOT call propose_strategy — instead let him know this design will be saved as a plan, and live execution for ${marketType} is coming in a follow-up update.`;
+  }
+
+  return `${base}
+Currently the bot can only execute RSI-threshold strategies: buy when RSI crosses below a value, sell when it crosses above a value (either direction is optional).
 Once you're confident, call propose_strategy with the precise rule. Don't call it prematurely — confirm understanding first if anything is ambiguous.
 If what he describes needs more than a single RSI threshold (e.g. multiple indicators, candlestick patterns, price action), say clearly that only RSI-threshold rules are supported right now, and offer to express the closest RSI-based approximation instead.`;
+}
 
 app.post("/strategy-chat", async (req, res) => {
   try {
-    const { conversationId, message } = req.body;
+    const { conversationId, message, marketType, symbol } = req.body;
     const chats = loadStrategyChats();
     const prior = chats[conversationId] || [];
 
     const messages = [...prior, { role: "user", content: message }];
+    const systemPrompt = buildStrategySystemPrompt(marketType, symbol);
 
     const aiRes = await axios.post(
       "https://api.anthropic.com/v1/messages",
-      { model: "claude-sonnet-4-5", max_tokens: 500, system: STRATEGY_SYSTEM_PROMPT, tools: [STRATEGY_TOOL], messages },
+      { model: "claude-sonnet-4-5", max_tokens: 500, system: systemPrompt, tools: [STRATEGY_TOOL], messages },
       { headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" } }
     );
 
@@ -238,6 +251,25 @@ app.post("/strategy-confirm", async (req, res) => {
 
     const result = await tradingPost("/strategies", { definition });
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || err.message });
+  }
+});
+
+// ─── Live market data proxies (for the Strategy Builder visualizations) ──
+app.get("/market-ticks", async (req, res) => {
+  try {
+    const data = await tradingGet("/market/ticks", { symbol: req.query.symbol, count: req.query.count });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || err.message });
+  }
+});
+
+app.get("/market-digit-stats", async (req, res) => {
+  try {
+    const data = await tradingGet("/market/digit-stats", { symbol: req.query.symbol, count: req.query.count });
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.response?.data || err.message });
   }
@@ -323,4 +355,4 @@ app.post("/trading-control", async (req, res) => {
 
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "overview.html")));
 app.listen(3000, () => console.log("Trading assistant bot running"));
-           
+                                                                                         
