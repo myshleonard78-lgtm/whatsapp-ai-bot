@@ -4,6 +4,7 @@
 <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Strategy Builder — Trading Desk</title>
 <link rel="stylesheet" href="styles.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 <nav class="sidebar">
@@ -24,15 +25,44 @@
 
 <main class="main">
   <h1 class="page-title">Strategy Builder</h1>
-  <p class="muted" style="margin-top:-14px; margin-bottom:22px;">
-    Describe a strategy in plain English. I'll ask questions until I understand it exactly, then show the precise rule before anything starts testing. Currently supports RSI-threshold rules only.
-  </p>
 
-  <div class="card">
+  <!-- Step 1: market type + symbol -->
+  <div class="card" id="setupCard">
+    <h2>1. What market type?</h2>
+    <div class="market-type-row" id="marketTypeRow">
+      <button class="type-btn" data-type="Rise/Fall">Rise / Fall</button>
+      <button class="type-btn" data-type="Over/Under">Over / Under</button>
+      <button class="type-btn" data-type="Matches/Differs">Matches / Differs</button>
+      <button class="type-btn" data-type="Even/Odd">Even / Odd</button>
+      <button class="type-btn" data-type="Other">Other</button>
+    </div>
+    <div style="margin-top:16px;">
+      <label class="muted" style="margin-right:10px;">Symbol</label>
+      <select id="symbolSelect">
+        <option value="R_10">Volatility 10</option>
+        <option value="R_25">Volatility 25</option>
+        <option value="R_50">Volatility 50</option>
+        <option value="R_75">Volatility 75</option>
+        <option value="R_100" selected>Volatility 100</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Live visualization, shown once a type is picked -->
+  <div class="card" id="vizCard" style="display:none; margin-top:14px;">
+    <h2 id="vizTitle">Live market</h2>
+    <div id="chartWrap"><canvas id="simChart" style="max-height:220px;"></canvas></div>
+    <div id="digitWrap" class="digit-grid" style="display:none;"></div>
+    <div class="muted" id="vizNote" style="margin-top:10px;"></div>
+  </div>
+
+  <!-- Chat, shown once a type is picked -->
+  <div class="card" id="chatCard" style="display:none; margin-top:14px;">
+    <h2>2. Explain your strategy</h2>
     <div class="chat-log" id="chatLog"></div>
     <div id="proposalArea"></div>
     <div class="chat-input-row">
-      <input id="chatInput" type="text" placeholder="e.g. Buy when RSI drops below 25 on Volatility 100..." onkeydown="if(event.key==='Enter') sendChat()" />
+      <input id="chatInput" type="text" placeholder="Describe your strategy while watching the data above..." onkeydown="if(event.key==='Enter') sendChat()" />
       <button class="primary" onclick="sendChat()">Send</button>
     </div>
   </div>
@@ -40,8 +70,93 @@
 
 <script src="app.js"></script>
 <script>
+let marketType = null, symbol = 'R_100';
+let simChart, vizInterval;
 const chatConversationId = 'dashboard-' + Date.now();
 let lastProposal = null;
+
+document.querySelectorAll('.type-btn').forEach(btn => {
+  btn.addEventListener('click', () => selectMarketType(btn.dataset.type));
+});
+document.getElementById('symbolSelect').addEventListener('change', (e) => {
+  symbol = e.target.value;
+  if (marketType) startVisualization();
+});
+
+function selectMarketType(type) {
+  marketType = type;
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  document.getElementById('vizCard').style.display = 'block';
+  document.getElementById('chatCard').style.display = 'block';
+  document.getElementById('vizTitle').textContent = type === 'Other' ? 'No live preview for this type' : `Live: ${type} on ${symbol}`;
+
+  if (vizInterval) clearInterval(vizInterval);
+
+  if (type === 'Rise/Fall') {
+    document.getElementById('chartWrap').style.display = 'block';
+    document.getElementById('digitWrap').style.display = 'none';
+    document.getElementById('vizNote').textContent = 'This is the real, live price feed — not a simulation — so what you see matches the actual market as you describe your strategy.';
+    startVisualization();
+  } else if (['Over/Under','Matches/Differs','Even/Odd'].includes(type)) {
+    document.getElementById('chartWrap').style.display = 'none';
+    document.getElementById('digitWrap').style.display = 'grid';
+    document.getElementById('vizNote').textContent = 'Last-digit frequency over the most recent 1000 ticks. Green = most frequent, blue = 2nd most, yellow = 2nd least, red = least frequent.';
+    startVisualization();
+  } else {
+    document.getElementById('vizCard').style.display = 'none';
+    document.getElementById('vizNote').textContent = '';
+  }
+
+  if (!document.getElementById('chatLog').childElementCount) {
+    addChatMsg(`Got it — designing a ${type} strategy on ${symbol}. Tell me what you're looking for.`, 'ai');
+  }
+}
+
+function startVisualization() {
+  if (vizInterval) clearInterval(vizInterval);
+  if (marketType === 'Rise/Fall') {
+    refreshChart();
+    vizInterval = setInterval(refreshChart, 3000);
+  } else if (['Over/Under','Matches/Differs','Even/Odd'].includes(marketType)) {
+    refreshDigits();
+    vizInterval = setInterval(refreshDigits, 5000);
+  }
+}
+
+async function refreshChart() {
+  try {
+    const res = await fetch(`/market-ticks?symbol=${symbol}&count=100`);
+    const d = await res.json();
+    const labels = d.prices.map((_, i) => i);
+    if (!simChart) {
+      simChart = new Chart(document.getElementById('simChart'), {
+        type: 'line',
+        data: { labels, datasets: [{ data: d.prices, borderColor: '#c99248', pointRadius: 0, tension: 0.15 }] },
+        options: { plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{ticks:{color:'#8b93a0', font:{family:'IBM Plex Mono'}}, grid:{color:'#2b3542'}}} }
+      });
+    } else {
+      simChart.data.labels = labels;
+      simChart.data.datasets[0].data = d.prices;
+      simChart.update('none');
+    }
+  } catch (e) { console.error('chart refresh failed', e); }
+}
+
+async function refreshDigits() {
+  try {
+    const res = await fetch(`/market-digit-stats?symbol=${symbol}&count=1000`);
+    const d = await res.json();
+    const wrap = document.getElementById('digitWrap');
+    wrap.innerHTML = '';
+    d.digits.forEach(x => {
+      const ring = x.rank === 'most' ? 'ring-green' : x.rank === '2nd-most' ? 'ring-blue' : x.rank === '2nd-least' ? 'ring-yellow' : x.rank === 'least' ? 'ring-red' : 'ring-none';
+      const el = document.createElement('div');
+      el.className = 'digit-circle ' + ring;
+      el.innerHTML = `<div class="digit-num">${x.digit}</div><div class="digit-pct">${x.pct}%</div>`;
+      wrap.appendChild(el);
+    });
+  } catch (e) { console.error('digit refresh failed', e); }
+}
 
 function addChatMsg(text, who) {
   const log = document.getElementById('chatLog');
@@ -61,7 +176,7 @@ async function sendChat() {
 
   const res = await fetch('/strategy-chat', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ conversationId: chatConversationId, message })
+    body: JSON.stringify({ conversationId: chatConversationId, message, marketType, symbol })
   });
   const data = await res.json();
   addChatMsg(data.reply, 'ai');
@@ -74,7 +189,7 @@ async function sendChat() {
       <div class="proposal-box">
         <strong class="serif">${p.id}</strong>
         <div>${p.description}</div>
-        <div class="mono muted">Symbol: ${p.symbol || 'R_100'}</div>
+        <div class="mono muted">Symbol: ${p.symbol || symbol}</div>
         ${p.buyOperator ? `<div class="mono">Buy when RSI ${p.buyOperator} ${p.buyValue}</div>` : ''}
         ${p.sellOperator ? `<div class="mono">Sell when RSI ${p.sellOperator} ${p.sellValue}</div>` : ''}
         <div style="margin-top:10px;">
@@ -102,4 +217,3 @@ async function confirmStrategy() {
 </script>
 </body>
 </html>
-
