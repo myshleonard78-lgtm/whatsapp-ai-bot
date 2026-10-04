@@ -180,12 +180,25 @@ const STRATEGY_TOOL = {
   },
 };
 
+const DIGIT_CONTRACT_KNOWLEDGE = `Background on Deriv digit contracts (you already know this — never ask Mysh to explain these mechanics, only ask about HIS specific preferences within them):
+
+- Every synthetic index tick has a price with a final decimal digit, 0-9. Digit contracts predict that digit on the LAST tick of the contract.
+- Over/Under: predicts whether the last digit will be over (>) or under (<) a chosen barrier digit. Over barrier is usually 0-8 (predicting a digit above it); Under barrier is usually 1-9 (predicting a digit below it).
+- Matches/Differs: predicts whether the last digit will exactly match, or differ from, a chosen digit (0-9).
+- Even/Odd: predicts whether the last digit will be even or odd — no barrier digit needed, just a direction.
+- Contracts run for a chosen number of ticks (commonly 1-10), not a time duration — the number of ticks IS the duration.
+- The digit-frequency circles Mysh is watching show the last 1000 ticks' digit distribution — a digit appearing more often (green/blue ring) suggests recent bias toward it; less often (yellow/red ring) suggests the opposite. A real strategy usually trades off this pattern in some way (e.g. betting a cold digit stays cold, or a hot digit keeps appearing, or reverts).
+
+When he describes a strategy, you should already understand what he means by "the 5 is cold" or "trade differs on the hottest digit" — just confirm the specific numbers/digits/tick-count he wants, don't re-explain or ask what Over/Under means.`;
+
 function buildStrategySystemPrompt(marketType, symbol) {
+  const isDigitType = ['Over/Under', 'Matches/Differs', 'Even/Odd'].includes(marketType);
+
   const base = `You are helping Mysh design a trading strategy for his automated Deriv bot, through conversation.
 He's designing a strategy for the "${marketType || 'Rise/Fall'}" market type on symbol ${symbol || 'R_100'}.
 He can see a live visualization while talking to you — a real price chart for Rise/Fall, or live digit-frequency circles (last 1000 ticks) for digit-based types — so refer to what he's watching when relevant.
-
-Ask clarifying questions until you're confident you understand exactly what he wants.
+${isDigitType ? '\n' + DIGIT_CONTRACT_KNOWLEDGE + '\n' : ''}
+Ask clarifying questions until you're confident you understand exactly what he wants — but only about HIS specific choices, never asking him to explain concepts you already know.
 Keep responses short and conversational.`;
 
   if (marketType && marketType !== "Rise/Fall") {
@@ -355,4 +368,3 @@ app.post("/trading-control", async (req, res) => {
 
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "overview.html")));
 app.listen(3000, () => console.log("Trading assistant bot running"));
-                                                                                         
