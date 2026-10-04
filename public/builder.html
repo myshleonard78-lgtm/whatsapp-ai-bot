@@ -358,6 +358,234 @@ function startVisualization() {
   }
 }
 
+function setLivePrice(price, decimals) {
+  const el = document.getElementById('livePrice');
+  if (price !== undefined) el.textContent = Number(price).toFixed(decimals ?? 2);
+}
+
+async function refreshChart() {
+  try {
+    const res = await fetch(`/market-ticks?symbol=${symbol}&count=100`);
+    const d = await res.json();
+    setLivePrice(d.prices[d.prices.length - 1], d.decimals);
+    const labels = d.prices.map((_, i) => i);
+    if (!simChart) {
+      simChart = new Chart(document.getElementById('simChart'), {
+        type: 'line',
+        data: { labels, datasets: [{ data: d.prices, borderColor: '#c99248', pointRadius: 0, tension: 0.15 }] },
+        options: { plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{ticks:{color:'#8b93a0', font:{family:'IBM Plex Mono'}}, grid:{color:'#2b3542'}}} }
+      });
+    } else {
+      simChart.data.labels = labels;
+      simChart.data.datasets[0].data = d.prices;
+      simChart.update('none');
+    }
+  } catch (e) { console.error('chart refresh failed', e); }
+}
+
+async function refreshDigits() {
+  try {
+    const res = await fetch(`/market-digit-stats?symbol=${symbol}&count=1000`);
+    const d = await res.json();
+    setLivePrice(d.lastPrice, d.decimals);
+    const wrap = document.getElementById('digitWrap');
+    wrap.innerHTML = '';
+    d.digits.forEach(x => {
+      const ring = x.rank === 'most' ? 'ring-green' : x.rank === '2nd-most' ? 'ring-blue' : x.rank === '2nd-least' ? 'ring-yellow' : x.rank === 'least' ? 'ring-red' : 'ring-none';
+      const el = document.createElement('div');
+      el.className = 'digit-circle ' + ring;
+      el.innerHTML = `<div class="digit-num">${x.digit}</div><div class="digit-pct">${x.pct}%</div>`;
+      wrap.appendChild(el);
+    });
+  } catch (e) { console.error('digit refresh failed', e); }
+}
+
+function addChatMsg(text, who) {
+  const log = document.getElementById('chatLog');
+  const div = document.createElement('div');
+  div.className = 'msg ' + who;
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const message = input.value.trim();
+  if (!message) return;
+  addChatMsg(message, 'user');
+  input.value = '';
+
+  const res = await fetch('/strategy-chat', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ conversationId: chatConversationId, message, marketType, symbol })
+  });
+  const data = await res.json();
+  addChatMsg(data.reply, 'ai');
+
+  const area = document.getElementById('proposalArea');
+  if (data.proposal) {
+    lastProposal = data.proposal;
+    const p = data.proposal;
+    area.innerHTML = `
+      <div class="proposal-box">
+        <strong class="serif">${p.id}</strong>
+        <div>${p.description}</div>
+        <div class="mono muted">Symbol: ${p.symbol || symbol}</div>
+        ${p.buyOperator ? `<div class="mono">Buy when RSI ${p.buyOperator} ${p.buyValue}</div>` : ''}
+        ${p.sellOperator ? `<div class="mono">Sell when RSI ${p.sellOperator} ${p.sellValue}</div>` : ''}
+        <div style="margin-top:10px;">
+          <button class="primary" onclick="confirmStrategy()">Start testing this strategy</button>
+        </div>
+      </div>`;
+  }
+}
+
+async function confirmStrategy() {
+  if (!lastProposal) return;
+  const res = await fetch('/strategy-confirm', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ proposal: lastProposal })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    addChatMsg(`"${lastProposal.id}" is now live on demo and being tested.`, 'ai');
+    document.getElementById('proposalArea').innerHTML = '';
+    lastProposal = null;
+  } else {
+    addChatMsg('Failed to add that strategy: ' + (data.error?.error || JSON.stringify(data.error)), 'ai');
+  }
+}
+</script>
+</body>
+</html>
+nt.getElementById('vizCard').style.display = 'none';
+    document.getElementById('vizNote').textContent = '';
+  }
+
+  if (!document.getElementById('chatLog').childElementCount) {
+    addChatMsg(`Got it — designing a ${type} strategy on ${symbol}. Tell me what you're looking for.`, 'ai');
+  }
+}
+
+function gatherPatternDefinition() {
+  const direction = document.getElementById('pf-direction').value;
+  const def = {
+    id: document.getElementById('pf-id').value.trim(),
+    symbol,
+    contractType: direction,
+    barrierDigit: Number(document.getElementById('pf-barrierDigit').value),
+    barrierMustBe: document.getElementById('pf-barrierMustBe').value,
+    entryDigits: getSelectedDigits('pf-entryDigits'),
+    entryMustBe: document.getElementById('pf-entryMustBe').value,
+    excludeIfPriorDigitIn: getSelectedDigits('pf-excludeDigits'),
+    priorDigitsBack: Number(document.getElementById('pf-priorDigitsBack').value) || 1,
+    resetDigits: getSelectedDigits('pf-resetDigits'),
+    durationTicks: Number(document.getElementById('pf-durationTicks').value) || 1,
+    maxConsecutiveLosses: Number(document.getElementById('pf-maxConsecutiveLosses').value) || 5,
+    description: document.getElementById('pf-description').value.trim(),
+  };
+  if (!def.id) { alert('Give the strategy a short name first.'); return null; }
+  if (!def.entryDigits.length) { alert('Pick at least one entry trigger digit.'); return null; }
+  return def;
+}
+
+async function runBacktest() {
+  const def = gatherPatternDefinition();
+  if (!def) return;
+  const resultEl = document.getElementById('backtestResult');
+  resultEl.innerHTML = '<div class="muted" style="margin-top:12px;">Running backtest against the last 1000 ticks…</div>';
+
+  const res = await fetch('/strategy-backtest', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ definition: def })
+  });
+  const data = await res.json();
+  if (data.error) {
+    resultEl.innerHTML = `<div class="muted" style="margin-top:12px;">Backtest failed: ${JSON.stringify(data.error)}</div>`;
+    return;
+  }
+  const pnlCls = data.winRatePct >= 50 ? 'pnl-pos' : 'pnl-neg';
+  resultEl.innerHTML = `
+    <div class="proposal-box" style="margin-top:12px;">
+      <div><strong>${data.simulatedEntries}</strong> entries found in the last ${data.sampleSize} ticks</div>
+      <div class="mono ${pnlCls}">Win rate: ${data.winRatePct}% (${data.wins}W / ${data.losses}L)</div>
+      <div class="muted" style="margin-top:6px;">${data.note}</div>
+    </div>`;
+}
+
+async function runBacktestAllMarkets() {
+  const def = gatherPatternDefinition();
+  if (!def) return;
+  const resultEl = document.getElementById('scanResult');
+  resultEl.innerHTML = '<div class="muted" style="margin-top:12px;">Testing this rule against all 10 markets — takes a few seconds…</div>';
+
+  const res = await fetch('/strategy-backtest-all', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ definition: def })
+  });
+  const data = await res.json();
+  if (data.error) {
+    resultEl.innerHTML = `<div class="muted" style="margin-top:12px;">Scan failed: ${JSON.stringify(data.error)}</div>`;
+    return;
+  }
+
+  const rows = data.results.map((r, i) => {
+    if (r.error) return `<tr><td>${r.symbol}</td><td colspan="3" class="muted">error</td></tr>`;
+    const pnlCls = r.winRatePct >= 50 ? 'pnl-pos' : 'pnl-neg';
+    const best = i === 0 ? ' style="color:var(--amber); font-weight:600;"' : '';
+    return `<tr${best}>
+      <td>${r.symbol}${i===0 ? ' 🏆' : ''}</td>
+      <td class="num">${r.simulatedEntries}</td>
+      <td class="num ${pnlCls}">${r.winRatePct}%</td>
+      <td class="num">${r.wins}W / ${r.losses}L</td>
+    </tr>`;
+  }).join('');
+
+  resultEl.innerHTML = `
+    <div class="proposal-box" style="margin-top:12px;">
+      <strong>Results, ranked by win rate</strong>
+      <table style="margin-top:10px;">
+        <thead><tr><th>Market</th><th>Entries</th><th>Win rate</th><th>W/L</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <button style="margin-top:10px;" onclick="useSymbol('${data.results[0].symbol}')">Use ${data.results[0].symbol}</button>
+    </div>`;
+}
+
+function useSymbol(sym) {
+  document.getElementById('symbolSelect').value = sym;
+  symbol = sym;
+  startVisualization();
+}
+
+async function confirmPattern() {
+  const def = gatherPatternDefinition();
+  if (!def) return;
+  const res = await fetch('/strategy-pattern-confirm', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ definition: def })
+  });
+  const data = await res.json();
+  const resultEl = document.getElementById('backtestResult');
+  if (data.ok) {
+    resultEl.innerHTML = `<div class="proposal-box" style="margin-top:12px;">✅ "${def.id}" is now live on demo and being tested.</div>`;
+  } else {
+    resultEl.innerHTML = `<div class="proposal-box" style="margin-top:12px;">❌ Failed: ${JSON.stringify(data.error)}</div>`;
+  }
+}
+
+function startVisualization() {
+  if (vizInterval) clearInterval(vizInterval);
+  if (marketType === 'Rise/Fall') {
+    refreshChart();
+    vizInterval = setInterval(refreshChart, 3000);
+  } else if (['Over/Under','Matches/Differs','Even/Odd'].includes(marketType)) {
+    refreshDigits();
+    vizInterval = setInterval(refreshDigits, 5000);
+  }
+}
+
 function setLivePrice(price) {
   const el = document.getElementById('livePrice');
   if (price !== undefined) el.textContent = Number(price).toFixed(4);
