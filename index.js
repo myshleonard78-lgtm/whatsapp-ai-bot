@@ -269,6 +269,25 @@ app.post("/strategy-confirm", async (req, res) => {
   }
 });
 
+// ─── Digit-pattern strategies (guided form, not chat) ────────
+app.post("/strategy-backtest", async (req, res) => {
+  try {
+    const result = await tradingPost("/strategies/backtest", { definition: req.body.definition });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || err.message });
+  }
+});
+
+app.post("/strategy-pattern-confirm", async (req, res) => {
+  try {
+    const result = await tradingPost("/strategies", { definition: { ...req.body.definition, kind: "digit-pattern" } });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || err.message });
+  }
+});
+
 // ─── Live market data proxies (for the Strategy Builder visualizations) ──
 app.get("/market-ticks", async (req, res) => {
   try {
@@ -368,3 +387,4 @@ app.post("/trading-control", async (req, res) => {
 
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "overview.html")));
 app.listen(3000, () => console.log("Trading assistant bot running"));
+      
