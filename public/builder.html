@@ -62,9 +62,86 @@
     <div class="muted" id="vizNote" style="margin-top:10px;"></div>
   </div>
 
+  <!-- Guided form, shown only for digit-based types -->
+  <div class="card" id="patternFormCard" style="display:none; margin-top:14px;">
+    <h2>2. Pattern rule (guided form)</h2>
+    <p class="muted" style="margin-top:-6px;">Fill this in instead of writing it out — one field at a time.</p>
+
+    <div class="form-grid">
+      <div class="form-field" id="directionField">
+        <label>Direction</label>
+        <select id="pf-direction"></select>
+      </div>
+      <div class="form-field" id="barrierField">
+        <label>Barrier digit</label>
+        <select id="pf-barrierDigit"></select>
+      </div>
+      <div class="form-field">
+        <label>Barrier digit must currently be</label>
+        <select id="pf-barrierMustBe">
+          <option value="any">Any</option>
+          <option value="normal" selected>Normal (not hot or cold)</option>
+          <option value="hot">Hot</option>
+          <option value="cold">Cold</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Entry digits must currently be</label>
+        <select id="pf-entryMustBe">
+          <option value="any">Any</option>
+          <option value="normal" selected>Normal (not hot or cold)</option>
+          <option value="hot">Hot</option>
+          <option value="cold">Cold</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Ticks back to check prior digit</label>
+        <input type="number" id="pf-priorDigitsBack" value="1" min="1" max="10" />
+      </div>
+      <div class="form-field">
+        <label>Trade duration (ticks)</label>
+        <input type="number" id="pf-durationTicks" value="1" min="1" max="10" />
+      </div>
+      <div class="form-field">
+        <label>Pause after this many losses in a row</label>
+        <input type="number" id="pf-maxConsecutiveLosses" value="5" min="1" max="20" />
+      </div>
+    </div>
+
+    <div class="digit-picker-row">
+      <label>Entry trigger digit(s)</label>
+      <div class="digit-picker" id="pf-entryDigits"></div>
+    </div>
+    <div class="digit-picker-row">
+      <label>Skip entry if the prior digit was one of</label>
+      <div class="digit-picker" id="pf-excludeDigits"></div>
+    </div>
+    <div class="digit-picker-row">
+      <label>Reset / "ready for next entry" digit(s)</label>
+      <div class="digit-picker" id="pf-resetDigits"></div>
+    </div>
+
+    <div class="form-grid" style="margin-top:14px;">
+      <div class="form-field">
+        <label>Strategy name (short, unique)</label>
+        <input type="text" id="pf-id" placeholder="e.g. over2-hot56" />
+      </div>
+      <div class="form-field" style="grid-column: span 2;">
+        <label>Description</label>
+        <input type="text" id="pf-description" placeholder="One-line summary" />
+      </div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <button onclick="runBacktest()">Run Backtest</button>
+      <button class="primary" onclick="confirmPattern()">Start Testing This Strategy</button>
+    </div>
+    <div id="backtestResult"></div>
+  </div>
+
   <!-- Chat, shown once a type is picked -->
   <div class="card" id="chatCard" style="display:none; margin-top:14px;">
-    <h2>2. Explain your strategy</h2>
+    <h2 id="chatCardTitle">2. Explain your strategy</h2>
     <div class="chat-log" id="chatLog"></div>
     <div id="proposalArea"></div>
     <div class="chat-input-row">
@@ -89,12 +166,55 @@ document.getElementById('symbolSelect').addEventListener('change', (e) => {
   if (marketType) startVisualization();
 });
 
+const DIGIT_TYPES = ['Over/Under', 'Matches/Differs', 'Even/Odd'];
+
+const DIRECTION_OPTIONS = {
+  'Over/Under': [{ v: 'DIGITOVER', l: 'Over' }, { v: 'DIGITUNDER', l: 'Under' }],
+  'Matches/Differs': [{ v: 'DIGITMATCH', l: 'Matches' }, { v: 'DIGITDIFF', l: 'Differs' }],
+  'Even/Odd': [{ v: 'DIGITEVEN', l: 'Even' }, { v: 'DIGITODD', l: 'Odd' }],
+};
+
+function buildDigitPicker(containerId) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  for (let d = 0; d <= 9; d++) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'digit-toggle';
+    btn.textContent = d;
+    btn.dataset.digit = d;
+    btn.addEventListener('click', () => btn.classList.toggle('active'));
+    el.appendChild(btn);
+  }
+}
+
+function getSelectedDigits(containerId) {
+  return [...document.querySelectorAll(`#${containerId} .digit-toggle.active`)].map(b => Number(b.dataset.digit));
+}
+
 function selectMarketType(type) {
   marketType = type;
   document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
   document.getElementById('vizCard').style.display = 'block';
-  document.getElementById('chatCard').style.display = 'block';
   document.getElementById('vizTitle').textContent = type === 'Other' ? 'No live preview for this type' : `Live: ${type} on ${symbol}`;
+
+  const isDigitType = DIGIT_TYPES.includes(type);
+  document.getElementById('patternFormCard').style.display = isDigitType ? 'block' : 'none';
+  document.getElementById('chatCard').style.display = 'block';
+  document.getElementById('chatCardTitle').textContent = isDigitType ? 'Or discuss it in chat instead' : '2. Explain your strategy';
+
+  if (isDigitType) {
+    const dirSelect = document.getElementById('pf-direction');
+    dirSelect.innerHTML = DIRECTION_OPTIONS[type].map(o => `<option value="${o.v}">${o.l}</option>`).join('');
+    document.getElementById('barrierField').style.display = type === 'Even/Odd' ? 'none' : 'block';
+
+    const barrierSelect = document.getElementById('pf-barrierDigit');
+    barrierSelect.innerHTML = Array.from({length:10},(_,d)=>`<option value="${d}">${d}</option>`).join('');
+
+    buildDigitPicker('pf-entryDigits');
+    buildDigitPicker('pf-excludeDigits');
+    buildDigitPicker('pf-resetDigits');
+  }
 
   if (vizInterval) clearInterval(vizInterval);
 
@@ -103,7 +223,7 @@ function selectMarketType(type) {
     document.getElementById('digitWrap').style.display = 'none';
     document.getElementById('vizNote').textContent = 'This is the real, live price feed — not a simulation — so what you see matches the actual market as you describe your strategy.';
     startVisualization();
-  } else if (['Over/Under','Matches/Differs','Even/Odd'].includes(type)) {
+  } else if (isDigitType) {
     document.getElementById('chartWrap').style.display = 'none';
     document.getElementById('digitWrap').style.display = 'grid';
     document.getElementById('vizNote').textContent = 'Last-digit frequency over the most recent 1000 ticks. Green = most frequent, blue = 2nd most, yellow = 2nd least, red = least frequent.';
@@ -115,6 +235,68 @@ function selectMarketType(type) {
 
   if (!document.getElementById('chatLog').childElementCount) {
     addChatMsg(`Got it — designing a ${type} strategy on ${symbol}. Tell me what you're looking for.`, 'ai');
+  }
+}
+
+function gatherPatternDefinition() {
+  const direction = document.getElementById('pf-direction').value;
+  const def = {
+    id: document.getElementById('pf-id').value.trim(),
+    symbol,
+    contractType: direction,
+    barrierDigit: Number(document.getElementById('pf-barrierDigit').value),
+    barrierMustBe: document.getElementById('pf-barrierMustBe').value,
+    entryDigits: getSelectedDigits('pf-entryDigits'),
+    entryMustBe: document.getElementById('pf-entryMustBe').value,
+    excludeIfPriorDigitIn: getSelectedDigits('pf-excludeDigits'),
+    priorDigitsBack: Number(document.getElementById('pf-priorDigitsBack').value) || 1,
+    resetDigits: getSelectedDigits('pf-resetDigits'),
+    durationTicks: Number(document.getElementById('pf-durationTicks').value) || 1,
+    maxConsecutiveLosses: Number(document.getElementById('pf-maxConsecutiveLosses').value) || 5,
+    description: document.getElementById('pf-description').value.trim(),
+  };
+  if (!def.id) { alert('Give the strategy a short name first.'); return null; }
+  if (!def.entryDigits.length) { alert('Pick at least one entry trigger digit.'); return null; }
+  return def;
+}
+
+async function runBacktest() {
+  const def = gatherPatternDefinition();
+  if (!def) return;
+  const resultEl = document.getElementById('backtestResult');
+  resultEl.innerHTML = '<div class="muted" style="margin-top:12px;">Running backtest against the last 1000 ticks…</div>';
+
+  const res = await fetch('/strategy-backtest', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ definition: def })
+  });
+  const data = await res.json();
+  if (data.error) {
+    resultEl.innerHTML = `<div class="muted" style="margin-top:12px;">Backtest failed: ${JSON.stringify(data.error)}</div>`;
+    return;
+  }
+  const pnlCls = data.winRatePct >= 50 ? 'pnl-pos' : 'pnl-neg';
+  resultEl.innerHTML = `
+    <div class="proposal-box" style="margin-top:12px;">
+      <div><strong>${data.simulatedEntries}</strong> entries found in the last ${data.sampleSize} ticks</div>
+      <div class="mono ${pnlCls}">Win rate: ${data.winRatePct}% (${data.wins}W / ${data.losses}L)</div>
+      <div class="muted" style="margin-top:6px;">${data.note}</div>
+    </div>`;
+}
+
+async function confirmPattern() {
+  const def = gatherPatternDefinition();
+  if (!def) return;
+  const res = await fetch('/strategy-pattern-confirm', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ definition: def })
+  });
+  const data = await res.json();
+  const resultEl = document.getElementById('backtestResult');
+  if (data.ok) {
+    resultEl.innerHTML = `<div class="proposal-box" style="margin-top:12px;">✅ "${def.id}" is now live on demo and being tested.</div>`;
+  } else {
+    resultEl.innerHTML = `<div class="proposal-box" style="margin-top:12px;">❌ Failed: ${JSON.stringify(data.error)}</div>`;
   }
 }
 
@@ -229,4 +411,5 @@ async function confirmStrategy() {
 }
 </script>
 </body>
-</html>
+  </html>
+  
