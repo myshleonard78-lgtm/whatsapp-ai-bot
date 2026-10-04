@@ -123,3 +123,8 @@ select {
 .ring-yellow { border-color: #c9b24a; }
 .ring-red { border-color: var(--red); }
 .ring-none { border-color: var(--border); }
+
+.live-price {
+  font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: var(--amber);
+  margin-left: 12px; font-weight: 500;
+}
