@@ -473,3 +473,11 @@ async function confirmStrategy() {
     addChatMsg(`"${lastProposal.id}" is now live on demo and being tested.`, 'ai');
     document.getElementById('proposalArea').innerHTML = '';
     lastProposal 
+= null;
+  } else {
+    addChatMsg('Failed to add that strategy: ' + (data.error?.error || JSON.stringify(data.error)), 'ai');
+  }
+}
+</script>
+</body>
+</html>
