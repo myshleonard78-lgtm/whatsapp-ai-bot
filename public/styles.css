@@ -145,4 +145,27 @@ select {
   font-size: 13px; cursor: pointer;
 }
 .digit-toggle.active { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); font-weight: 600; }
-           
+
+/* ── Strategy detail modal ─────────────────────────────────── */
+.card-clickable { cursor: pointer; transition: border-color 0.15s; }
+.card-clickable:hover { border-color: var(--amber); }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: 20px;
+}
+.modal-panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 22px 24px; max-width: 560px; width: 100%; max-height: 85vh; overflow-y: auto;
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.modal-header h2 { font-size: 19px; margin: 0; }
+.modal-close { cursor: pointer; color: var(--muted); font-size: 16px; padding: 4px 8px; }
+.modal-close:hover { color: var(--text); }
+
+.detail-stats-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  background: var(--panel-2); border-radius: 8px; padding: 14px;
+}
+.figure-sm { font-family: 'Source Serif 4', serif; font-size: 18px; font-weight: 600; margin-top: 2px; }
