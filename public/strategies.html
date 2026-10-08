@@ -32,11 +32,39 @@
   <div class="empty" id="emptyState" style="display:none;">No strategies running yet — add one in the Strategy Builder.</div>
 </main>
 
+<!-- Detail modal: today's runs, like a broker transaction panel -->
+<div class="modal-overlay" id="detailModal" style="display:none;" onclick="if(event.target===this) closeDetail()">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2 id="detailTitle" class="serif">Strategy</h2>
+      <span class="modal-close" onclick="closeDetail()">✕</span>
+    </div>
+
+    <div class="detail-stats-grid">
+      <div><div class="muted">Total stake</div><div class="mono figure-sm" id="ds-stake">—</div></div>
+      <div><div class="muted">Total payout</div><div class="mono figure-sm" id="ds-payout">—</div></div>
+      <div><div class="muted">No. of runs</div><div class="mono figure-sm" id="ds-runs">—</div></div>
+      <div><div class="muted">Contracts won</div><div class="mono figure-sm pnl-pos" id="ds-won">—</div></div>
+      <div><div class="muted">Contracts lost</div><div class="mono figure-sm pnl-neg" id="ds-lost">—</div></div>
+      <div><div class="muted">Total profit/loss</div><div class="mono figure-sm" id="ds-pnl">—</div></div>
+    </div>
+
+    <h2 style="margin-top:20px;">Today's runs</h2>
+    <table id="detailTable">
+      <thead><tr><th>Type</th><th>Entry spot</th><th>Exit spot</th><th>Stake</th><th>P/L</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="empty" id="detailEmpty" style="display:none;">No runs yet today.</div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 <script>
 window.onControlDone = refresh;
+let lastStrategies = [];
 
 function renderStrategies(strategies) {
+  lastStrategies = strategies;
   const container = document.getElementById('strategyCards');
   container.innerHTML = '';
   document.getElementById('emptyState').style.display = strategies.length ? 'none' : 'block';
@@ -45,7 +73,8 @@ function renderStrategies(strategies) {
     const pct = Math.min(100, (s.tradeCount / s.gateMinTrades) * 100);
     const statusCls = s.status === 'promoted' ? 'green' : s.status === 'discarded' ? 'red' : 'amber';
     const card = document.createElement('div');
-    card.className = 'card';
+    card.className = 'card card-clickable';
+    card.onclick = () => openDetail(s.strategyId);
     card.innerHTML = `
       <h2 style="display:flex; justify-content:space-between; align-items:center;">
         <span>${s.strategyId}</span>
@@ -57,11 +86,53 @@ function renderStrategies(strategies) {
       <div class="row"><span>Profit factor</span><span class="mono">${s.profitFactor ?? '∞'} <span class="muted">/ ${s.gateMinProfitFactor}</span></span></div>
       <div class="row"><span>Drawdown</span><span class="mono">${s.drawdownPct}%</span></div>
       <div class="row" style="margin-top:10px;">
-        <span class="strategy-remove" onclick="removeStrategy('${s.strategyId}')">Remove strategy</span>
+        <span class="strategy-remove" onclick="event.stopPropagation(); removeStrategy('${s.strategyId}')">Remove strategy</span>
       </div>
     `;
     container.appendChild(card);
   });
+}
+
+function openDetail(strategyId) {
+  const s = lastStrategies.find(x => x.strategyId === strategyId);
+  if (!s) return;
+
+  document.getElementById('detailTitle').textContent = s.strategyId;
+  const t = s.today || { runs: 0, won: 0, lost: 0, totalStake: 0, totalPayout: 0, totalPnl: 0 };
+  document.getElementById('ds-stake').textContent = fmt(t.totalStake);
+  document.getElementById('ds-payout').textContent = fmt(t.totalPayout);
+  document.getElementById('ds-runs').textContent = t.runs;
+  document.getElementById('ds-won').textContent = t.won;
+  document.getElementById('ds-lost').textContent = t.lost;
+  const pnlEl = document.getElementById('ds-pnl');
+  pnlEl.textContent = (t.totalPnl >= 0 ? '+' : '') + fmt(t.totalPnl);
+  pnlEl.className = 'mono figure-sm ' + (t.totalPnl >= 0 ? 'pnl-pos' : 'pnl-neg');
+
+  const cutoff = Date.now() - 24*60*60*1000;
+  const todaysTrades = (s.recentTrades || []).filter(tr => new Date(tr.timestamp).getTime() >= cutoff).reverse();
+  const tbody = document.querySelector('#detailTable tbody');
+  tbody.innerHTML = '';
+  document.getElementById('detailEmpty').style.display = todaysTrades.length ? 'none' : 'block';
+  document.getElementById('detailTable').style.display = todaysTrades.length ? 'table' : 'none';
+
+  todaysTrades.forEach(tr => {
+    const row = document.createElement('tr');
+    const pnlCls = tr.pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+    row.innerHTML = `
+      <td>${tr.contractType || '—'}</td>
+      <td class="num">${tr.entrySpot ?? '—'}</td>
+      <td class="num">${tr.exitSpot ?? '—'}</td>
+      <td class="num">${tr.stake !== null ? fmt(tr.stake) : '—'}</td>
+      <td class="num ${pnlCls}">${tr.pnl >= 0 ? '+' : ''}${fmt(tr.pnl)}</td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  document.getElementById('detailModal').style.display = 'flex';
+}
+
+function closeDetail() {
+  document.getElementById('detailModal').style.display = 'none';
 }
 
 async function refresh() {
@@ -72,4 +143,5 @@ refresh();
 setInterval(refresh, 5000);
 </script>
 </body>
-</html>
+  </html>
+  
