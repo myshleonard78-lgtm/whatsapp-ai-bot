@@ -94,6 +94,10 @@
           <option value="cold">Cold</option>
         </select>
       </div>
+      <div class="form-field" id="losingDigitField">
+        <label>Losing digits must each be under</label>
+        <input type="number" id="pf-maxLosingDigitPct" placeholder="e.g. 10 (%)" min="0" max="100" step="0.1" />
+      </div>
       <div class="form-field">
         <label>Ticks back to check prior digit</label>
         <input type="number" id="pf-priorDigitsBack" value="1" min="1" max="10" />
@@ -209,6 +213,7 @@ function selectMarketType(type) {
     const dirSelect = document.getElementById('pf-direction');
     dirSelect.innerHTML = DIRECTION_OPTIONS[type].map(o => `<option value="${o.v}">${o.l}</option>`).join('');
     document.getElementById('barrierField').style.display = type === 'Even/Odd' ? 'none' : 'block';
+    document.getElementById('losingDigitField').style.display = type === 'Over/Under' ? 'block' : 'none';
 
     const barrierSelect = document.getElementById('pf-barrierDigit');
     barrierSelect.innerHTML = Array.from({length:10},(_,d)=>`<option value="${d}">${d}</option>`).join('');
@@ -247,6 +252,7 @@ function gatherPatternDefinition() {
     contractType: direction,
     barrierDigit: Number(document.getElementById('pf-barrierDigit').value),
     barrierMustBe: document.getElementById('pf-barrierMustBe').value,
+    maxLosingDigitPct: Number(document.getElementById('pf-maxLosingDigitPct').value) || 0,
     entryDigits: getSelectedDigits('pf-entryDigits'),
     entryMustBe: document.getElementById('pf-entryMustBe').value,
     excludeIfPriorDigitIn: getSelectedDigits('pf-excludeDigits'),
@@ -462,6 +468,138 @@ async function sendChat() {
   }
 }
 
+async function confirmPattern() {
+  const def = gatherPatternDefinition();
+  if (!def) return;
+  const res = await fetch('/strategy-pattern-confirm', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ definition: def })
+  });
+  const data = await res.json();
+  const resultEl = document.getElementById('backtestResult');
+  if (data.ok) {
+    resultEl.innerHTML = `<div class="proposal-box" style="margin-top:12px;">✅ "${def.id}" is now live on demo and being tested.</div>`;
+  } else {
+    resultEl.innerHTML = `<div class="proposal-box" style="margin-top:12px;">❌ Failed: ${JSON.stringify(data.error)}</div>`;
+  }
+}
+
+// ─── True live streaming: every tick pushed the instant it happens ────────
+// No polling — this is an open connection (Server-Sent Events) that the
+// server writes to the moment a new tick arrives. "Every tick matters."
+let liveStream = null;
+const chartPrices = [];
+
+function setLivePrice(price, decimals) {
+  const el = document.getElementById('livePrice');
+  if (price !== undefined) el.textContent = Number(price).toFixed(decimals ?? 2);
+}
+
+function renderDigitCircles(digits) {
+  const wrap = document.getElementById('digitWrap');
+  if (!wrap.childElementCount) {
+    // Build once, then just update numbers/rings in place — avoids a visible flicker on every tick
+    digits.forEach(x => {
+      const el = document.createElement('div');
+      el.className = 'digit-circle';
+      el.id = 'digit-' + x.digit;
+      el.innerHTML = `<div class="digit-num">${x.digit}</div><div class="digit-pct"></div>`;
+      wrap.appendChild(el);
+    });
+  }
+  digits.forEach(x => {
+    const el = document.getElementById('digit-' + x.digit);
+    const ring = x.rank === 'most' ? 'ring-green' : x.rank === '2nd-most' ? 'ring-blue' : x.rank === '2nd-least' ? 'ring-yellow' : x.rank === 'least' ? 'ring-red' : 'ring-none';
+    el.className = 'digit-circle ' + ring;
+    el.querySelector('.digit-pct').textContent = x.pct.toFixed(1) + '%';
+  });
+}
+
+async function startVisualization() {
+  if (liveStream) { liveStream.close(); liveStream = null; }
+  chartPrices.length = 0;
+  document.getElementById('digitWrap').innerHTML = '';
+  simChart = null;
+
+  // Seed the chart with recent history so it doesn't start empty, then the
+  // live stream takes over for every tick after that.
+  if (marketType === 'Rise/Fall') {
+    try {
+      const res = await fetch(`/market-ticks?symbol=${symbol}&count=100`);
+      const d = await res.json();
+      chartPrices.push(...d.prices);
+      setLivePrice(d.prices[d.prices.length - 1], d.decimals);
+    } catch (e) { console.error('chart seed failed', e); }
+  }
+
+  liveStream = new EventSource(`/market-stream?symbol=${symbol}`);
+  liveStream.onmessage = (event) => {
+    const d = JSON.parse(event.data);
+    setLivePrice(d.price, d.decimals);
+
+    if (marketType === 'Rise/Fall') {
+      chartPrices.push(d.price);
+      if (chartPrices.length > 100) chartPrices.shift();
+      const labels = chartPrices.map((_, i) => i);
+      if (!simChart) {
+        simChart = new Chart(document.getElementById('simChart'), {
+          type: 'line',
+          data: { labels, datasets: [{ data: chartPrices, borderColor: '#c99248', pointRadius: 0, tension: 0.15 }] },
+          options: { animation: false, plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{ticks:{color:'#8b93a0', font:{family:'IBM Plex Mono'}}, grid:{color:'#2b3542'}}} }
+        });
+      } else {
+        simChart.data.labels = labels;
+        simChart.data.datasets[0].data = chartPrices;
+        simChart.update('none');
+      }
+    } else if (d.digits) {
+      renderDigitCircles(d.digits);
+    }
+  };
+  liveStream.onerror = () => console.warn('live stream disconnected, browser will auto-retry');
+}
+
+function addChatMsg(text, who) {
+  const log = document.getElementById('chatLog');
+  const div = document.createElement('div');
+  div.className = 'msg ' + who;
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const message = input.value.trim();
+  if (!message) return;
+  addChatMsg(message, 'user');
+  input.value = '';
+
+  const res = await fetch('/strategy-chat', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ conversationId: chatConversationId, message, marketType, symbol })
+  });
+  const data = await res.json();
+  addChatMsg(data.reply, 'ai');
+
+  const area = document.getElementById('proposalArea');
+  if (data.proposal) {
+    lastProposal = data.proposal;
+    const p = data.proposal;
+    area.innerHTML = `
+      <div class="proposal-box">
+        <strong class="serif">${p.id}</strong>
+        <div>${p.description}</div>
+        <div class="mono muted">Symbol: ${p.symbol || symbol}</div>
+        ${p.buyOperator ? `<div class="mono">Buy when RSI ${p.buyOperator} ${p.buyValue}</div>` : ''}
+        ${p.sellOperator ? `<div class="mono">Sell when RSI ${p.sellOperator} ${p.sellValue}</div>` : ''}
+        <div style="margin-top:10px;">
+          <button class="primary" onclick="confirmStrategy()">Start testing this strategy</button>
+        </div>
+      </div>`;
+  }
+}
+
 async function confirmStrategy() {
   if (!lastProposal) return;
   const res = await fetch('/strategy-confirm', {
@@ -472,12 +610,11 @@ async function confirmStrategy() {
   if (data.ok) {
     addChatMsg(`"${lastProposal.id}" is now live on demo and being tested.`, 'ai');
     document.getElementById('proposalArea').innerHTML = '';
-    lastProposal 
-= null;
+    lastProposal = null;
   } else {
     addChatMsg('Failed to add that strategy: ' + (data.error?.error || JSON.stringify(data.error)), 'ai');
   }
 }
 </script>
 </body>
-</html>
+</html>q
