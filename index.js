@@ -290,7 +290,10 @@ app.post("/strategy-backtest-all", async (req, res) => {
 
 app.post("/strategy-pattern-confirm", async (req, res) => {
   try {
-    const result = await tradingPost("/strategies", { definition: { ...req.body.definition, kind: "digit-pattern" } });
+    // The definition now carries its own kind ('digit-pattern' or 'adaptive-digit')
+    // from the form, rather than this route forcing one.
+    const def = req.body.definition;
+    const result = await tradingPost("/strategies", { definition: { kind: "digit-pattern", ...def } });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.response?.data || err.message });
