@@ -67,6 +67,12 @@
     <h2>2. Pattern rule (guided form)</h2>
     <p class="muted" style="margin-top:-6px;">Fill this in instead of writing it out — one field at a time.</p>
 
+    <div class="market-type-row" style="margin-bottom:16px;">
+      <button class="type-btn rule-mode-btn active" id="ruleModeFixed" onclick="setRuleMode('fixed')">Fixed Rule</button>
+      <button class="type-btn rule-mode-btn" id="ruleModeAdaptive" onclick="setRuleMode('adaptive')">Adaptive (auto-pick target)</button>
+    </div>
+    <p class="muted" id="ruleModeNote" style="margin-top:-10px; margin-bottom:16px;">You choose the exact digit/barrier to trade.</p>
+
     <div class="form-grid">
       <div class="form-field" id="directionField">
         <label>Direction</label>
@@ -76,7 +82,7 @@
         <label>Barrier digit</label>
         <select id="pf-barrierDigit"></select>
       </div>
-      <div class="form-field">
+      <div class="form-field fixed-only">
         <label>Barrier digit must currently be</label>
         <select id="pf-barrierMustBe">
           <option value="any">Any</option>
@@ -85,7 +91,7 @@
           <option value="cold">Cold</option>
         </select>
       </div>
-      <div class="form-field">
+      <div class="form-field fixed-only">
         <label>Entry digits must currently be</label>
         <select id="pf-entryMustBe">
           <option value="any">Any</option>
@@ -94,13 +100,31 @@
           <option value="cold">Cold</option>
         </select>
       </div>
-      <div class="form-field" id="losingDigitField">
+      <div class="form-field fixed-only" id="losingDigitField">
         <label>Losing digits must each be under</label>
         <input type="number" id="pf-maxLosingDigitPct" placeholder="e.g. 10 (%)" min="0" max="100" step="0.1" />
       </div>
-      <div class="form-field">
+      <div class="form-field fixed-only">
         <label>Ticks back to check prior digit</label>
         <input type="number" id="pf-priorDigitsBack" value="1" min="1" max="10" />
+      </div>
+      <div class="form-field adaptive-only" id="minEdgeField" style="display:none;">
+        <label>Minimum edge required to trade (%)</label>
+        <input type="number" id="pf-minEdgePct" placeholder="e.g. 3" min="0" max="50" step="0.5" />
+      </div>
+      <div class="form-field adaptive-only" id="targetSelectionField" style="display:none;">
+        <label>Target digit</label>
+        <select id="pf-targetSelection">
+          <option value="coldest">Coldest (bet it's due)</option>
+          <option value="hottest">Hottest (bet it continues)</option>
+        </select>
+      </div>
+      <div class="form-field adaptive-only" id="biasModeField" style="display:none;">
+        <label>Even/Odd bias</label>
+        <select id="pf-biasMode">
+          <option value="reversion">Reversion (trade the less-frequent side)</option>
+          <option value="trend">Trend (trade the more-frequent side)</option>
+        </select>
       </div>
       <div class="form-field">
         <label>Trade duration (ticks)</label>
@@ -112,17 +136,19 @@
       </div>
     </div>
 
-    <div class="digit-picker-row">
-      <label>Entry trigger digit(s)</label>
-      <div class="digit-picker" id="pf-entryDigits"></div>
-    </div>
-    <div class="digit-picker-row">
-      <label>Skip entry if the prior digit was one of</label>
-      <div class="digit-picker" id="pf-excludeDigits"></div>
-    </div>
-    <div class="digit-picker-row">
-      <label>Reset / "ready for next entry" digit(s)</label>
-      <div class="digit-picker" id="pf-resetDigits"></div>
+    <div class="fixed-only">
+      <div class="digit-picker-row">
+        <label>Entry trigger digit(s)</label>
+        <div class="digit-picker" id="pf-entryDigits"></div>
+      </div>
+      <div class="digit-picker-row">
+        <label>Skip entry if the prior digit was one of</label>
+        <div class="digit-picker" id="pf-excludeDigits"></div>
+      </div>
+      <div class="digit-picker-row">
+        <label>Reset / "ready for next entry" digit(s)</label>
+        <div class="digit-picker" id="pf-resetDigits"></div>
+      </div>
     </div>
 
     <div class="form-grid" style="margin-top:14px;">
@@ -160,6 +186,28 @@
 <script src="app.js"></script>
 <script>
 let marketType = null, symbol = 'R_100';
+let ruleMode = 'fixed';
+
+function setRuleMode(mode) {
+  ruleMode = mode;
+  document.getElementById('ruleModeFixed').classList.toggle('active', mode === 'fixed');
+  document.getElementById('ruleModeAdaptive').classList.toggle('active', mode === 'adaptive');
+  document.querySelectorAll('.fixed-only').forEach(el => el.style.display = mode === 'fixed' ? '' : 'none');
+  document.getElementById('ruleModeNote').textContent = mode === 'fixed'
+    ? 'You choose the exact digit/barrier to trade.'
+    : 'The system continuously recalculates which digit/barrier currently has the best edge, and trades that — no fixed digit to pick.';
+
+  // Adaptive mode picks the barrier/digit itself — hide manual barrier selection
+  document.getElementById('barrierField').style.display = (mode === 'adaptive' || marketType === 'Even/Odd') ? 'none' : 'block';
+  updateAdaptiveFieldVisibility();
+}
+
+function updateAdaptiveFieldVisibility() {
+  const showAdaptive = ruleMode === 'adaptive';
+  document.getElementById('minEdgeField').style.display = showAdaptive ? 'block' : 'none';
+  document.getElementById('targetSelectionField').style.display = (showAdaptive && marketType === 'Matches/Differs') ? 'block' : 'none';
+  document.getElementById('biasModeField').style.display = (showAdaptive && marketType === 'Even/Odd') ? 'block' : 'none';
+}
 let simChart;
 const chatConversationId = 'dashboard-' + Date.now();
 let lastProposal = null;
@@ -200,7 +248,7 @@ function getSelectedDigits(containerId) {
 
 function selectMarketType(type) {
   marketType = type;
-  document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  document.querySelectorAll('.type-btn:not(.rule-mode-btn)').forEach(b => b.classList.toggle('active', b.dataset.type === type));
   document.getElementById('vizCard').style.display = 'block';
   document.getElementById('vizTitle').textContent = type === 'Other' ? 'No live preview for this type' : `Live: ${type} on ${symbol}`;
 
@@ -212,7 +260,7 @@ function selectMarketType(type) {
   if (isDigitType) {
     const dirSelect = document.getElementById('pf-direction');
     dirSelect.innerHTML = DIRECTION_OPTIONS[type].map(o => `<option value="${o.v}">${o.l}</option>`).join('');
-    document.getElementById('barrierField').style.display = type === 'Even/Odd' ? 'none' : 'block';
+    document.getElementById('barrierField').style.display = (type === 'Even/Odd' || ruleMode === 'adaptive') ? 'none' : 'block';
     document.getElementById('losingDigitField').style.display = type === 'Over/Under' ? 'block' : 'none';
 
     const barrierSelect = document.getElementById('pf-barrierDigit');
@@ -221,6 +269,7 @@ function selectMarketType(type) {
     buildDigitPicker('pf-entryDigits');
     buildDigitPicker('pf-excludeDigits');
     buildDigitPicker('pf-resetDigits');
+    updateAdaptiveFieldVisibility();
   }
 
   if (type === 'Rise/Fall') {
@@ -246,8 +295,30 @@ function selectMarketType(type) {
 
 function gatherPatternDefinition() {
   const direction = document.getElementById('pf-direction').value;
+  const id = document.getElementById('pf-id').value.trim();
+  const description = document.getElementById('pf-description').value.trim();
+  const durationTicks = Number(document.getElementById('pf-durationTicks').value) || 1;
+  const maxConsecutiveLosses = Number(document.getElementById('pf-maxConsecutiveLosses').value) || 5;
+
+  if (!id) { alert('Give the strategy a short name first.'); return null; }
+
+  if (ruleMode === 'adaptive') {
+    const modeMap = { 'Over/Under': 'over-under', 'Matches/Differs': 'matches-differs', 'Even/Odd': 'even-odd' };
+    const def = {
+      kind: 'adaptive-digit',
+      id, symbol, description, durationTicks, maxConsecutiveLosses,
+      mode: modeMap[marketType],
+      direction: marketType === 'Even/Odd' ? undefined : direction,
+      minEdgePct: Number(document.getElementById('pf-minEdgePct').value) || undefined,
+      targetSelection: document.getElementById('pf-targetSelection').value,
+      biasMode: document.getElementById('pf-biasMode').value,
+    };
+    return def;
+  }
+
   const def = {
-    id: document.getElementById('pf-id').value.trim(),
+    kind: 'digit-pattern',
+    id,
     symbol,
     contractType: direction,
     barrierDigit: Number(document.getElementById('pf-barrierDigit').value),
@@ -258,11 +329,10 @@ function gatherPatternDefinition() {
     excludeIfPriorDigitIn: getSelectedDigits('pf-excludeDigits'),
     priorDigitsBack: Number(document.getElementById('pf-priorDigitsBack').value) || 1,
     resetDigits: getSelectedDigits('pf-resetDigits'),
-    durationTicks: Number(document.getElementById('pf-durationTicks').value) || 1,
-    maxConsecutiveLosses: Number(document.getElementById('pf-maxConsecutiveLosses').value) || 5,
-    description: document.getElementById('pf-description').value.trim(),
+    durationTicks,
+    maxConsecutiveLosses,
+    description,
   };
-  if (!def.id) { alert('Give the strategy a short name first.'); return null; }
   if (!def.entryDigits.length) { alert('Pick at least one entry trigger digit.'); return null; }
   return def;
 }
@@ -468,138 +538,6 @@ async function sendChat() {
   }
 }
 
-async function confirmPattern() {
-  const def = gatherPatternDefinition();
-  if (!def) return;
-  const res = await fetch('/strategy-pattern-confirm', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ definition: def })
-  });
-  const data = await res.json();
-  const resultEl = document.getElementById('backtestResult');
-  if (data.ok) {
-    resultEl.innerHTML = `<div class="proposal-box" style="margin-top:12px;">✅ "${def.id}" is now live on demo and being tested.</div>`;
-  } else {
-    resultEl.innerHTML = `<div class="proposal-box" style="margin-top:12px;">❌ Failed: ${JSON.stringify(data.error)}</div>`;
-  }
-}
-
-// ─── True live streaming: every tick pushed the instant it happens ────────
-// No polling — this is an open connection (Server-Sent Events) that the
-// server writes to the moment a new tick arrives. "Every tick matters."
-let liveStream = null;
-const chartPrices = [];
-
-function setLivePrice(price, decimals) {
-  const el = document.getElementById('livePrice');
-  if (price !== undefined) el.textContent = Number(price).toFixed(decimals ?? 2);
-}
-
-function renderDigitCircles(digits) {
-  const wrap = document.getElementById('digitWrap');
-  if (!wrap.childElementCount) {
-    // Build once, then just update numbers/rings in place — avoids a visible flicker on every tick
-    digits.forEach(x => {
-      const el = document.createElement('div');
-      el.className = 'digit-circle';
-      el.id = 'digit-' + x.digit;
-      el.innerHTML = `<div class="digit-num">${x.digit}</div><div class="digit-pct"></div>`;
-      wrap.appendChild(el);
-    });
-  }
-  digits.forEach(x => {
-    const el = document.getElementById('digit-' + x.digit);
-    const ring = x.rank === 'most' ? 'ring-green' : x.rank === '2nd-most' ? 'ring-blue' : x.rank === '2nd-least' ? 'ring-yellow' : x.rank === 'least' ? 'ring-red' : 'ring-none';
-    el.className = 'digit-circle ' + ring;
-    el.querySelector('.digit-pct').textContent = x.pct.toFixed(1) + '%';
-  });
-}
-
-async function startVisualization() {
-  if (liveStream) { liveStream.close(); liveStream = null; }
-  chartPrices.length = 0;
-  document.getElementById('digitWrap').innerHTML = '';
-  simChart = null;
-
-  // Seed the chart with recent history so it doesn't start empty, then the
-  // live stream takes over for every tick after that.
-  if (marketType === 'Rise/Fall') {
-    try {
-      const res = await fetch(`/market-ticks?symbol=${symbol}&count=100`);
-      const d = await res.json();
-      chartPrices.push(...d.prices);
-      setLivePrice(d.prices[d.prices.length - 1], d.decimals);
-    } catch (e) { console.error('chart seed failed', e); }
-  }
-
-  liveStream = new EventSource(`/market-stream?symbol=${symbol}`);
-  liveStream.onmessage = (event) => {
-    const d = JSON.parse(event.data);
-    setLivePrice(d.price, d.decimals);
-
-    if (marketType === 'Rise/Fall') {
-      chartPrices.push(d.price);
-      if (chartPrices.length > 100) chartPrices.shift();
-      const labels = chartPrices.map((_, i) => i);
-      if (!simChart) {
-        simChart = new Chart(document.getElementById('simChart'), {
-          type: 'line',
-          data: { labels, datasets: [{ data: chartPrices, borderColor: '#c99248', pointRadius: 0, tension: 0.15 }] },
-          options: { animation: false, plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{ticks:{color:'#8b93a0', font:{family:'IBM Plex Mono'}}, grid:{color:'#2b3542'}}} }
-        });
-      } else {
-        simChart.data.labels = labels;
-        simChart.data.datasets[0].data = chartPrices;
-        simChart.update('none');
-      }
-    } else if (d.digits) {
-      renderDigitCircles(d.digits);
-    }
-  };
-  liveStream.onerror = () => console.warn('live stream disconnected, browser will auto-retry');
-}
-
-function addChatMsg(text, who) {
-  const log = document.getElementById('chatLog');
-  const div = document.createElement('div');
-  div.className = 'msg ' + who;
-  div.textContent = text;
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-}
-
-async function sendChat() {
-  const input = document.getElementById('chatInput');
-  const message = input.value.trim();
-  if (!message) return;
-  addChatMsg(message, 'user');
-  input.value = '';
-
-  const res = await fetch('/strategy-chat', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ conversationId: chatConversationId, message, marketType, symbol })
-  });
-  const data = await res.json();
-  addChatMsg(data.reply, 'ai');
-
-  const area = document.getElementById('proposalArea');
-  if (data.proposal) {
-    lastProposal = data.proposal;
-    const p = data.proposal;
-    area.innerHTML = `
-      <div class="proposal-box">
-        <strong class="serif">${p.id}</strong>
-        <div>${p.description}</div>
-        <div class="mono muted">Symbol: ${p.symbol || symbol}</div>
-        ${p.buyOperator ? `<div class="mono">Buy when RSI ${p.buyOperator} ${p.buyValue}</div>` : ''}
-        ${p.sellOperator ? `<div class="mono">Sell when RSI ${p.sellOperator} ${p.sellValue}</div>` : ''}
-        <div style="margin-top:10px;">
-          <button class="primary" onclick="confirmStrategy()">Start testing this strategy</button>
-        </div>
-      </div>`;
-  }
-}
-
 async function confirmStrategy() {
   if (!lastProposal) return;
   const res = await fetch('/strategy-confirm', {
@@ -617,4 +555,4 @@ async function confirmStrategy() {
 }
 </script>
 </body>
-</html>q
+</html>
